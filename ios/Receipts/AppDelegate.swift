@@ -1,4 +1,4 @@
-import UIKit
+rimport UIKit
 import React
 import React_RCTAppDelegate
 import ReactAppDependencyProvider

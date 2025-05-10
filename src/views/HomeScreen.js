@@ -1,9 +1,9 @@
 // src/views/HomeScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
-import { BudgetController } from '../controllers/BudgetController';
-import { TransactionController } from '../controllers/TransactionController';
-import { CategoryController } from '../controllers/CategoryController';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert } from 'react-native';
+import { SupabaseBudgetController } from '../controllers/SupabaseBudgetController';
+import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
+import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
 import TransactionItem from './components/TransactionItem';
 import BudgetSummary from './components/BudgetSummary';
 
@@ -13,9 +13,9 @@ const HomeScreen = ({ navigation }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  const budgetController = new BudgetController();
-  const transactionController = new TransactionController();
-  const categoryController = new CategoryController();
+  const budgetController = new SupabaseBudgetController();
+  const transactionController = new SupabaseTransactionController();
+  const categoryController = new SupabaseCategoryController();
   
   useEffect(() => {
     loadData();
@@ -56,6 +56,7 @@ const HomeScreen = ({ navigation }) => {
       setRecentTransactions(recent);
     } catch (error) {
       console.error('Error loading home data:', error);
+      Alert.alert('Error', 'Failed to load data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -75,7 +76,7 @@ const HomeScreen = ({ navigation }) => {
   
   return (
     <View style={styles.container}>
-      {summary && <BudgetSummary summary={summary} />}
+      {summary && <BudgetSummary summary={summary} onPress={() => navigation.navigate('Budget')} />}
       
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -90,7 +91,7 @@ const HomeScreen = ({ navigation }) => {
         
         <FlatList
           data={recentTransactions}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.id.toString()}
           renderItem={({ item }) => (
             <TransactionItem 
               transaction={item}

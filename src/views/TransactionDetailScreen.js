@@ -9,8 +9,8 @@ import {
   ScrollView,
   ActivityIndicator
 } from 'react-native';
-import { TransactionController } from '../controllers/TransactionController';
-import { CategoryController } from '../controllers/CategoryController';
+import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
+import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
 import Icon from 'react-native-vector-icons/Feather';
 
 const TransactionDetailScreen = ({ route, navigation }) => {
@@ -19,8 +19,8 @@ const TransactionDetailScreen = ({ route, navigation }) => {
   const [category, setCategory] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  const transactionController = new TransactionController();
-  const categoryController = new CategoryController();
+  const transactionController = new SupabaseTransactionController();
+  const categoryController = new SupabaseCategoryController();
   
   useEffect(() => {
     loadTransaction();
@@ -38,12 +38,22 @@ const TransactionDetailScreen = ({ route, navigation }) => {
       }
     } catch (error) {
       console.error('Error loading transaction:', error);
+      Alert.alert('Error', 'Failed to load transaction details. Please try again.');
     } finally {
       setLoading(false);
     }
   };
   
   const handleDelete = () => {
+    // Don't allow deletion of recurring transaction instances
+    if (transaction.isRecurringInstance) {
+      Alert.alert(
+        'Cannot Delete',
+        'This is an instance of a recurring transaction. You can only delete the original transaction.'
+      );
+      return;
+    }
+    
     Alert.alert(
       'Delete Transaction',
       'Are you sure you want to delete this transaction? This action cannot be undone.',
@@ -145,25 +155,48 @@ const TransactionDetailScreen = ({ route, navigation }) => {
           <Text style={styles.detailLabel}>Time</Text>
           <Text style={styles.detailValue}>{formatTime(transaction.date)}</Text>
         </View>
+        
+        {transaction.recurring && (
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Recurring</Text>
+            <Text style={styles.detailValue}>
+              {transaction.frequency === 'custom' 
+                ? `${transaction.customFrequency?.times || 1} times per ${transaction.customFrequency?.period || 'month'}`
+                : `${transaction.frequency.charAt(0).toUpperCase() + transaction.frequency.slice(1)}`
+              }
+            </Text>
+          </View>
+        )}
+        
+        {transaction.isRecurringInstance && (
+          <View style={styles.recursInfoContainer}>
+            <Icon name="info" size={16} color="#666" style={styles.infoIcon} />
+            <Text style={styles.recurringInfoText}>
+              This is an instance of a recurring transaction. Editing the original transaction will affect all future occurrences.
+            </Text>
+          </View>
+        )}
       </View>
       
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => navigation.navigate('AddTransaction', { transaction })}
-        >
-          <Icon name="edit" size={20} color="#fff" />
-          <Text style={styles.actionButtonText}>Edit</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={handleDelete}
-        >
-          <Icon name="trash-2" size={20} color="#fff" />
-          <Text style={styles.actionButtonText}>Delete</Text>
-        </TouchableOpacity>
-      </View>
+      {!transaction.isRecurringInstance && (
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.editButton]}
+            onPress={() => navigation.navigate('AddTransaction', { transaction })}
+          >
+            <Icon name="edit" size={20} color="#fff" />
+            <Text style={styles.actionButtonText}>Edit</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={handleDelete}
+          >
+            <Icon name="trash-2" size={20} color="#fff" />
+            <Text style={styles.actionButtonText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -239,6 +272,21 @@ const styles = StyleSheet.create({
   categoryText: {
     marginLeft: 4,
     fontWeight: '500',
+  },
+  recursInfoContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f5f5f5',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  infoIcon: {
+    marginRight: 8,
+  },
+  recurringInfoText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#666',
   },
   actionsContainer: {
     flexDirection: 'row',

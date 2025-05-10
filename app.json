@@ -1,4 +1,5 @@
 {
   "name": "Receipts",
-  "displayName": "Receipts"
+  "displayName": "Receipts",
+  "scheme": "BudgetAppka"
 }

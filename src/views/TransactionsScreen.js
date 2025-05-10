@@ -1,8 +1,8 @@
 // src/views/TransactionsScreen.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { TransactionController } from '../controllers/TransactionController';
-import { CategoryController } from '../controllers/CategoryController';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
+import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
 import TransactionItem from './components/TransactionItem';
 import Icon from 'react-native-vector-icons/Feather';
 
@@ -12,8 +12,8 @@ const TransactionsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all', 'income', 'expense'
   
-  const transactionController = new TransactionController();
-  const categoryController = new CategoryController();
+  const transactionController = new SupabaseTransactionController();
+  const categoryController = new SupabaseCategoryController();
   
   useEffect(() => {
     loadData();
@@ -37,6 +37,7 @@ const TransactionsScreen = ({ navigation }) => {
       setCategories(allCategories);
     } catch (error) {
       console.error('Error loading transactions:', error);
+      Alert.alert('Error', 'Failed to load transactions. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -90,7 +91,7 @@ const TransactionsScreen = ({ navigation }) => {
       
       <FlatList
         data={filteredTransactions()}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={({ item }) => (
           <TransactionItem
             transaction={item}
