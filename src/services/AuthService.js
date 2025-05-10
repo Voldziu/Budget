@@ -4,8 +4,13 @@ import { supabase } from '../utils/supabase';
 export class AuthService {
   // Check if user is authenticated
   async isAuthenticated() {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session !== null;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      return session !== null;
+    } catch (error) {
+      console.error('Authentication check error:', error);
+      return false;
+    }
   }
   
   // Get current user

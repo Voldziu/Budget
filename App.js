@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Text, TouchableOpacity, StyleSheet, View, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import 'react-native-gesture-handler';
+import 'react-native-url-polyfill/auto';
 import { supabase } from './src/utils/supabase';
 import { AuthService } from './src/services/AuthService';
 

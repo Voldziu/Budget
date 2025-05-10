@@ -19,6 +19,7 @@ export const supabase = createClient(
     },
   }
 );
+console.log('Supabase exported:', supabase);
 
 // Example of table names - you'll need to create these in your Supabase dashboard
 export const TABLES = {
