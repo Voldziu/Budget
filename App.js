@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+// Updated App.js with correct navigator references
+import React, { useState, useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { Text, TouchableOpacity, StyleSheet, View, ActivityIndicator } from 'react-native';
+import { Text, TouchableOpacity, StyleSheet, View, ActivityIndicator, Linking } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
@@ -85,30 +86,100 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const authService = new AuthService();
+  const navigationRef = useRef(null);
   
+  // Function to check authentication status
+  const checkAuth = async () => {
+    try {
+      const authenticated = await authService.isAuthenticated();
+      console.log('Authentication check result:', authenticated);
+      setIsAuthenticated(authenticated);
+    } catch (error) {
+      console.error('Auth check error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Handle deep link URL processing
+  const handleUrl = async (url) => {
+    if (!url) return;
+    
+    console.log('Processing deep link URL:', url);
+    
+    // Extract token and type from URL if present
+    try {
+      // Parse for auth confirmation
+      if (url.includes('auth/callback')) {
+        console.log('Auth callback detected in deep link');
+        // Refresh auth state
+        await checkAuth();
+      }
+      
+      // Parse for password reset
+      if (url.includes('reset-password')) {
+        console.log('Password reset detected in deep link');
+        // If we have a navigation ref and user is authenticated, navigate to reset screen
+        if (navigationRef.current && isAuthenticated) {
+          // navigationRef.current.navigate('ResetPassword');
+          console.log('Would navigate to reset password screen');
+        }
+      }
+    } catch (error) {
+      console.error('Error handling deep link:', error);
+    }
+  };
+  
+  // Set up deep link handling - fixed version for React Native 0.65+
   useEffect(() => {
-    // Check if the user is authenticated
-    const checkAuth = async () => {
+    // Handle initial URL (app opened from deep link)
+    const getInitialURL = async () => {
       try {
-        const authenticated = await authService.isAuthenticated();
-        setIsAuthenticated(authenticated);
-      } catch (error) {
-        console.error('Auth check error:', error);
-      } finally {
-        setIsLoading(false);
+        const initialUrl = await Linking.getInitialURL();
+        if (initialUrl) {
+          console.log('App opened from deep link:', initialUrl);
+          handleUrl(initialUrl);
+        }
+      } catch (e) {
+        console.error('Error getting initial URL:', e);
       }
     };
     
+    // Run once at startup
+    getInitialURL();
+    
+    // Handle deep links when app is already running - using correct approach for newer RN versions
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      console.log('Deep link received while app running:', url);
+      handleUrl(url);
+    });
+    
+    // Clean up subscription properly
+    return () => {
+      subscription.remove();
+    };
+  }, [isAuthenticated]); // Re-run if authentication state changes
+  
+  // Set up authentication checking and listener
+  useEffect(() => {
+    // Initial auth check
     checkAuth();
     
     // Set up auth state change listener
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("Auth state changed:", event);
+        console.log("Auth state changed:", event, "Session:", session ? "exists" : "null");
+        
         if (event === 'SIGNED_IN' && session) {
+          console.log('User signed in, updating state');
           setIsAuthenticated(true);
         } else if (event === 'SIGNED_OUT') {
+          console.log('User signed out, updating state');
           setIsAuthenticated(false);
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('Token refreshed');
+        } else if (event === 'USER_UPDATED') {
+          console.log('User updated');
         }
       }
     );
@@ -121,6 +192,7 @@ const App = () => {
     };
   }, []);
   
+  // Loading screen
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -129,9 +201,10 @@ const App = () => {
     );
   }
   
+  // Main app rendering
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <Stack.Navigator>
           {!isAuthenticated ? (
             // Auth flow
@@ -144,7 +217,7 @@ const App = () => {
             // App flow
             <>
               <Stack.Screen 
-                name="Main" 
+                name="MainApp" // Changed from "Main" to "MainApp" to avoid confusion
                 component={MainTabs} 
                 options={{ headerShown: false }}
               />

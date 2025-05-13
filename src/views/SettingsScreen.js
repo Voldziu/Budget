@@ -1,4 +1,4 @@
-// src/views/SettingsScreen.js
+// Updated SettingsScreen.js with correct navigation code
 import React, { useState } from 'react';
 import {
   View,
@@ -7,19 +7,26 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  Switch
+  Switch,
+  ActivityIndicator
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Feather';
+import { AuthService } from '../services/AuthService';
+import { supabase, TABLES } from '../utils/supabase';
+import { CommonActions } from '@react-navigation/native';
 
-const SettingsScreen = () => {
+const SettingsScreen = ({ navigation }) => {
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
+  const authService = new AuthService();
   
-  const clearAllData = async () => {
+  // New selective data clearing function with fixed navigation
+  const clearAppData = async () => {
     Alert.alert(
-      'Clear All Data',
-      'This will permanently delete all your transactions, categories, and budget data. This action cannot be undone.',
+      'Clear App Data',
+      'This will delete all your transactions, categories, and budget data from the database. Your account will remain but all data will be removed. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -27,15 +34,122 @@ const SettingsScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await AsyncStorage.clear();
-              Alert.alert('Success', 'All data has been cleared.');
+              setIsLoading(true);
+              
+              // Get current user to ensure we only delete their data
+              const { data: { user } } = await supabase.auth.getUser();
+              
+              if (!user) {
+                throw new Error('You must be logged in to clear data');
+              }
+              
+              console.log('Clearing data for user:', user.id);
+              
+              // Delete user's data from each table
+              // We delete in reverse order of dependencies: transactions first, then categories, then budgets
+              
+              // 1. Delete transactions
+              const { error: transError } = await supabase
+                .from(TABLES.TRANSACTIONS)
+                .delete()
+                .eq('user_id', user.id);
+                
+              if (transError) {
+                console.error('Error deleting transactions:', transError);
+                throw new Error(`Failed to delete transactions: ${transError.message}`);
+              }
+              
+              console.log('Transactions deleted successfully');
+              
+              // 2. Delete categories
+              const { error: catError } = await supabase
+                .from(TABLES.CATEGORIES)
+                .delete()
+                .eq('user_id', user.id);
+                
+              if (catError) {
+                console.error('Error deleting categories:', catError);
+                throw new Error(`Failed to delete categories: ${catError.message}`);
+              }
+              
+              console.log('Categories deleted successfully');
+              
+              // 3. Delete budgets
+              const { error: budgetError } = await supabase
+                .from(TABLES.BUDGETS)
+                .delete()
+                .eq('user_id', user.id);
+                
+              if (budgetError) {
+                console.error('Error deleting budgets:', budgetError);
+                throw new Error(`Failed to delete budgets: ${budgetError.message}`);
+              }
+              
+              console.log('Budgets deleted successfully');
+              
+              // Clear any application caches in AsyncStorage, but NOT auth tokens
+              const allKeys = await AsyncStorage.getAllKeys();
+              
+              // Filter out Supabase auth keys which typically start with 'sb-'
+              const appKeys = allKeys.filter(key => !key.startsWith('sb-'));
+              
+              if (appKeys.length > 0) {
+                await AsyncStorage.multiRemove(appKeys);
+                console.log('App cache cleared:', appKeys);
+              }
+              
+              Alert.alert(
+                'Success', 
+                'All your data has been cleared. Default categories will be recreated when you next use the app.'
+              );
+              
+              // *** FIXED NAVIGATION CODE ***
+              // Navigate back to the first tab (Home) instead of trying to replace Main
+              navigation.navigate('Home');
             } catch (error) {
               console.error('Error clearing data:', error);
-              Alert.alert('Error', 'Failed to clear data. Please try again.');
+              Alert.alert('Error', error.message || 'Failed to clear data. Please try again.');
+            } finally {
+              setIsLoading(false);
             }
           }
         }
       ]
+    );
+  };
+  
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Sign Out', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await authService.signOut();
+              // Navigation will be handled by the auth state listener in App.js
+              // No need to manually navigate here
+            } catch (error) {
+              console.error('Error signing out:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+  
+  // Function to navigate back to root (if needed)
+  const resetToRoot = () => {
+    // This is a proper way to reset navigation to a specific state
+    navigation.dispatch(
+      CommonActions.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      })
     );
   };
   
@@ -90,12 +204,22 @@ const SettingsScreen = () => {
           <Icon name="chevron-right" size={20} color="#999" />
         </TouchableOpacity>
         
-        <TouchableOpacity style={styles.settingItem} onPress={clearAllData}>
+        <TouchableOpacity 
+          style={styles.settingItem} 
+          onPress={clearAppData}
+          disabled={isLoading}
+        >
           <View style={styles.settingInfo}>
             <Icon name="trash-2" size={20} color="#F44336" style={styles.settingIcon} />
-            <Text style={[styles.settingText, { color: '#F44336' }]}>Clear All Data</Text>
+            <Text style={[styles.settingText, { color: '#F44336' }]}>
+              {isLoading ? 'Clearing Data...' : 'Clear App Data'}
+            </Text>
           </View>
-          <Icon name="chevron-right" size={20} color="#999" />
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#F44336" />
+          ) : (
+            <Icon name="chevron-right" size={20} color="#999" />
+          )}
         </TouchableOpacity>
       </View>
       
@@ -124,6 +248,14 @@ const SettingsScreen = () => {
             <Text style={styles.settingText}>Terms of Service</Text>
           </View>
           <Icon name="chevron-right" size={20} color="#999" />
+        </TouchableOpacity>
+      </View>
+      
+      {/* Sign Out Section */}
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+          <Icon name="log-out" size={20} color="#fff" style={styles.signOutIcon} />
+          <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -174,6 +306,24 @@ const styles = StyleSheet.create({
   versionText: {
     fontSize: 14,
     color: '#999',
+  },
+  signOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F44336',
+    padding: 16,
+    marginVertical: 8,
+    marginHorizontal: 16,
+    borderRadius: 8,
+  },
+  signOutIcon: {
+    marginRight: 8,
+  },
+  signOutText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

@@ -9,8 +9,8 @@ import {
   TextInput,
   ActivityIndicator
 } from 'react-native';
-import { BudgetController } from '../controllers/BudgetController';
-import { CategoryController } from '../controllers/CategoryController';
+import { SupabaseBudgetController} from '../controllers/SupabaseBudgetController';
+import { SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
 import Icon from 'react-native-vector-icons/Feather';
 
 const BudgetScreen = ({ navigation }) => {
@@ -22,8 +22,8 @@ const BudgetScreen = ({ navigation }) => {
   const [editingBudget, setEditingBudget] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
   
-  const budgetController = new BudgetController();
-  const categoryController = new CategoryController();
+  const budgetController = new SupabaseBudgetController();
+  const categoryController = new SupabaseCategoryController();
   
   useEffect(() => {
     loadData();

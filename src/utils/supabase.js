@@ -19,9 +19,55 @@ export const supabase = createClient(
     },
   }
 );
+console.log('Supabase client initialized');
 console.log('Supabase exported:', supabase);
 
-// Example of table names - you'll need to create these in your Supabase dashboard
+export async function getAuthenticatedUser() {
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    
+    if (error) {
+      console.error('Error getting authenticated user:', error.message);
+      return null;
+    }
+    
+    if (!data || !data.user) {
+      console.log('No authenticated user found');
+      return null;
+    }
+    
+    console.log('Authenticated user retrieved:', data.user.id);
+    return data.user;
+  } catch (error) {
+    console.error('Exception getting authenticated user:', error);
+    return null;
+  }
+}
+
+export async function refreshSession() {
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    
+    if (error) {
+      console.error('Error refreshing session:', error.message);
+      return false;
+    }
+    
+    if (data && data.session) {
+      console.log('Session refreshed successfully');
+      return true;
+    } else {
+      console.log('No session to refresh');
+      return false;
+    }
+  } catch (error) {
+    console.error('Exception refreshing session:', error);
+    return false;
+  }
+}
+
+
+
 export const TABLES = {
   TRANSACTIONS: 'transactions',
   CATEGORIES: 'categories',

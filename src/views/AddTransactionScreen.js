@@ -13,8 +13,8 @@ import {
   ActivityIndicator
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { CategoryController } from '../controllers/CategoryController';
-import { TransactionController } from '../controllers/TransactionController';
+import { SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
+import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
 
 const AddTransactionScreen = ({ route, navigation }) => {
   // Get transaction if in edit mode
@@ -23,7 +23,7 @@ const AddTransactionScreen = ({ route, navigation }) => {
   // State variables
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
-  const [isIncome, setIsIncome] = useState(false);
+  const [is_income, setIs_Income] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,8 +35,8 @@ const AddTransactionScreen = ({ route, navigation }) => {
   });
   
   // Controllers
-  const categoryController = new CategoryController();
-  const transactionController = new TransactionController();
+  const categoryController = new SupabaseCategoryController();
+  const transactionController = new SupabaseTransactionController();
   
   // Load data on component mount
   useEffect(() => {
@@ -48,7 +48,7 @@ const AddTransactionScreen = ({ route, navigation }) => {
     if (editTransaction) {
       setAmount(editTransaction.amount.toString());
       setDescription(editTransaction.description);
-      setIsIncome(editTransaction.isIncome);
+      setIs_Income(editTransaction.is_income);
       setSelectedCategory(editTransaction.category);
       
       // Set recurring if applicable
@@ -71,7 +71,7 @@ const AddTransactionScreen = ({ route, navigation }) => {
       // Set default category
       if (!selectedCategory && allCategories.length > 0) {
         // Default to first non-income category for expenses, or income category for income
-        const defaultCategory = isIncome 
+        const defaultCategory = is_income 
           ? allCategories.find(c => c.name === 'Income') 
           : allCategories.find(c => c.name !== 'Income');
         
@@ -106,7 +106,7 @@ const AddTransactionScreen = ({ route, navigation }) => {
         amount: parseFloat(amount),
         description,
         category: selectedCategory,
-        isIncome,
+        is_income,
         date: new Date().toISOString(),
       };
       
@@ -138,10 +138,10 @@ const AddTransactionScreen = ({ route, navigation }) => {
   };
   
   const toggleTransactionType = () => {
-    setIsIncome(!isIncome);
+    setIs_Income(!is_income);
     
     // Switch to appropriate default category
-    if (isIncome) {
+    if (is_income) {
       // Switching to expense, find first non-income category
       const expenseCategory = categories.find(c => c.name !== 'Income');
       setSelectedCategory(expenseCategory?.id);
@@ -170,26 +170,26 @@ const AddTransactionScreen = ({ route, navigation }) => {
         {/* Transaction Type Toggle */}
         <View style={styles.typeToggleContainer}>
           <TouchableOpacity
-            style={[styles.typeButton, !isIncome && styles.activeTypeButton]}
-            onPress={() => setIsIncome(false)}
+            style={[styles.typeButton, !is_income && styles.activeTypeButton]}
+            onPress={() => setIs_Income(false)}
           >
             <Text 
               style={[
                 styles.typeButtonText, 
-                !isIncome && styles.activeTypeButtonText
+                !is_income && styles.activeTypeButtonText
               ]}
             >
               Expense
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.typeButton, isIncome && styles.activeTypeButton, isIncome && styles.incomeButton]}
-            onPress={() => setIsIncome(true)}
+            style={[styles.typeButton, is_income && styles.activeTypeButton, is_income && styles.incomeButton]}
+            onPress={() => setIs_Income(true)}
           >
             <Text 
               style={[
                 styles.typeButtonText, 
-                isIncome && styles.activeTypeButtonText
+                is_income && styles.activeTypeButtonText
               ]}
             >
               Income
@@ -233,8 +233,8 @@ const AddTransactionScreen = ({ route, navigation }) => {
           >
             {categories
               .filter(category => 
-                (isIncome && category.name === 'Income') || 
-                (!isIncome && category.name !== 'Income')
+                (is_income && category.name === 'Income') || 
+                (!is_income && category.name !== 'Income')
               )
               .map(category => (
                 <TouchableOpacity
