@@ -1,4 +1,4 @@
-// src/views/TransactionDetailScreen.js
+// src/views/TransactionDetailScreen.js - Fixed with proper navigation to edit screen
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -12,12 +12,16 @@ import {
 import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
 import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
 import Icon from 'react-native-vector-icons/Feather';
+import { useCurrency } from '../utils/CurrencyContext';
 
 const TransactionDetailScreen = ({ route, navigation }) => {
   const { id } = route.params;
   const [transaction, setTransaction] = useState(null);
   const [category, setCategory] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // Get currency formatter
+  const { formatAmount } = useCurrency();
   
   const transactionController = new SupabaseTransactionController();
   const categoryController = new SupabaseCategoryController();
@@ -31,9 +35,11 @@ const TransactionDetailScreen = ({ route, navigation }) => {
     try {
       const transactionData = await transactionController.getTransactionById(id);
       if (transactionData) {
+        console.log('Loaded transaction:', transactionData);
         setTransaction(transactionData);
         
         const categoryData = await categoryController.getCategoryById(transactionData.category);
+        console.log('Loaded category:', categoryData);
         setCategory(categoryData);
       }
     } catch (error) {
@@ -76,6 +82,36 @@ const TransactionDetailScreen = ({ route, navigation }) => {
     );
   };
   
+  const handleEdit = () => {
+    // Create a simpler transaction object without complex objects that could cause issues
+    if (!transaction) return;
+    
+    // Clean up the transaction object to avoid navigation issues
+    const cleanTransaction = {
+      id: transaction.id,
+      amount: transaction.amount,
+      description: transaction.description,
+      category: transaction.category,
+      is_income: transaction.is_income,
+      date: transaction.date,
+      recurring: transaction.recurring || false,
+      frequency: transaction.frequency || 'monthly'
+    };
+    
+    // If there's custom frequency data, add it in a safe way
+    if (transaction.customFrequency) {
+      cleanTransaction.customFrequency = {
+        times: transaction.customFrequency.times || 1,
+        period: transaction.customFrequency.period || 'month'
+      };
+    }
+    
+    console.log('Navigating to edit with transaction:', cleanTransaction);
+    
+    // Navigate with the cleaned transaction object
+    navigation.navigate('AddTransactionScreen', { transaction: cleanTransaction });
+  };
+  
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -110,18 +146,21 @@ const TransactionDetailScreen = ({ route, navigation }) => {
     );
   }
   
+  // Check if this is income or expense explicitly
+  const isIncome = transaction.is_income === true;
+  
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.amountContainer}>
           <Text style={[
             styles.amount,
-            transaction.isIncome ? styles.incomeText : styles.expenseText
+            isIncome ? styles.incomeText : styles.expenseText
           ]}>
-            {transaction.isIncome ? '+' : '-'}${parseFloat(transaction.amount).toFixed(2)}
+            {isIncome ? '+' : '-'}{formatAmount(transaction.amount)}
           </Text>
           <Text style={styles.transactionType}>
-            {transaction.isIncome ? 'Income' : 'Expense'}
+            {isIncome ? 'Income' : 'Expense'}
           </Text>
         </View>
       </View>
@@ -182,7 +221,7 @@ const TransactionDetailScreen = ({ route, navigation }) => {
         <View style={styles.actionsContainer}>
           <TouchableOpacity 
             style={[styles.actionButton, styles.editButton]}
-            onPress={() => navigation.navigate('AddTransaction', { transaction })}
+            onPress={handleEdit}
           >
             <Icon name="edit" size={20} color="#fff" />
             <Text style={styles.actionButtonText}>Edit</Text>

@@ -1,9 +1,13 @@
-// src/views/components/BudgetSummary.js
+// src/views/components/BudgetSummary.js - Updated with new calculation
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import { useCurrency } from '../../utils/CurrencyContext';
 
 const BudgetSummary = ({ summary, onPress }) => {
+  // Get currency formatter from context
+  const { formatAmount } = useCurrency();
+  
   // Check if we have valid summary data
   if (!summary) {
     return (
@@ -13,7 +17,15 @@ const BudgetSummary = ({ summary, onPress }) => {
     );
   }
   
-  const { totalIncome, totalExpenses, balance, spendingByCategory } = summary;
+  const { 
+    totalIncome, 
+    totalExpenses, 
+    balance, 
+    spendingByCategory,
+    monthlyBudget,
+    totalBudget, // New property that includes monthlyBudget + income
+    budgetPercentage // New property for overall budget progress
+  } = summary;
   
   // Calculate the percentage of budget spent
   const currentBudget = spendingByCategory.reduce(
@@ -21,9 +33,8 @@ const BudgetSummary = ({ summary, onPress }) => {
     0
   );
   
-  const percentSpent = currentBudget > 0 
-    ? Math.min(100, (totalExpenses / currentBudget) * 100) 
-    : 0;
+  // Use the new budgetPercentage for the progress bar
+  const percentSpent = budgetPercentage || 0;
   
   return (
     <TouchableOpacity 
@@ -40,16 +51,23 @@ const BudgetSummary = ({ summary, onPress }) => {
       
       <View style={styles.summaryRow}>
         <View style={styles.summaryItem}>
+          <Text style={styles.summaryLabel}>Budget</Text>
+          <Text style={[styles.summaryAmount, styles.budgetText]}>
+            {formatAmount(monthlyBudget)}
+          </Text>
+        </View>
+        
+        <View style={styles.summaryItem}>
           <Text style={styles.summaryLabel}>Income</Text>
           <Text style={[styles.summaryAmount, styles.incomeText]}>
-            ${totalIncome.toFixed(2)}
+            {formatAmount(totalIncome)}
           </Text>
         </View>
         
         <View style={styles.summaryItem}>
           <Text style={styles.summaryLabel}>Expenses</Text>
           <Text style={[styles.summaryAmount, styles.expenseText]}>
-            ${totalExpenses.toFixed(2)}
+            {formatAmount(totalExpenses)}
           </Text>
         </View>
       </View>
@@ -58,14 +76,14 @@ const BudgetSummary = ({ summary, onPress }) => {
       
       <View style={styles.balanceContainer}>
         <View>
-          <Text style={styles.balanceLabel}>Balance</Text>
+          <Text style={styles.balanceLabel}>Available</Text>
           <Text 
             style={[
               styles.balanceAmount,
               balance >= 0 ? styles.incomeText : styles.expenseText
             ]}
           >
-            ${Math.abs(balance).toFixed(2)}
+            {formatAmount(Math.max(0, totalBudget - totalExpenses))}
           </Text>
         </View>
         
@@ -77,7 +95,7 @@ const BudgetSummary = ({ summary, onPress }) => {
             <View 
               style={[
                 styles.progressFill,
-                { width: `${percentSpent}%` },
+                { width: `${Math.min(100, percentSpent)}%` },
                 percentSpent > 80 && styles.progressWarning,
                 percentSpent >= 100 && styles.progressDanger
               ]}
@@ -132,8 +150,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   summaryAmount: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
+  },
+  budgetText: {
+    color: '#007AFF', // Blue for budget
   },
   incomeText: {
     color: '#4CAF50',

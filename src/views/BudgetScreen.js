@@ -1,4 +1,4 @@
-// src/views/BudgetScreen.js
+// src/views/BudgetScreen.js - Updated to use Supabase controllers and include income
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -9,9 +9,10 @@ import {
   TextInput,
   ActivityIndicator
 } from 'react-native';
-import { SupabaseBudgetController} from '../controllers/SupabaseBudgetController';
-import { SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
+import { SupabaseBudgetController } from '../controllers/SupabaseBudgetController';
+import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
 import Icon from 'react-native-vector-icons/Feather';
+import { useCurrency } from '../utils/CurrencyContext';
 
 const BudgetScreen = ({ navigation }) => {
   const [budget, setBudget] = useState({ amount: 0 });
@@ -22,6 +23,10 @@ const BudgetScreen = ({ navigation }) => {
   const [editingBudget, setEditingBudget] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
   
+  // Get currency formatter
+  const { formatAmount } = useCurrency();
+  
+  // Use Supabase controllers
   const budgetController = new SupabaseBudgetController();
   const categoryController = new SupabaseCategoryController();
   
@@ -101,16 +106,24 @@ const BudgetScreen = ({ navigation }) => {
     }
   };
   
-  const formatCurrency = (amount) => {
-    return `$${parseFloat(amount).toFixed(2)}`;
-  };
-  
   const getMonthName = (month) => {
     const monthNames = [
       'January', 'February', 'March', 'April', 'May', 'June',
       'July', 'August', 'September', 'October', 'November', 'December'
     ];
     return monthNames[month];
+  };
+  
+  // Calculate total available budget (including income)
+  const getTotalBudget = () => {
+    if (!summary) return budget.amount;
+    return budget.amount + summary.totalIncome;
+  };
+  
+  // Calculate amount left after expenses
+  const getAvailableBudget = () => {
+    if (!summary) return budget.amount;
+    return Math.max(0, getTotalBudget() - summary.totalExpenses);
   };
   
   if (loading) {
@@ -156,8 +169,8 @@ const BudgetScreen = ({ navigation }) => {
         ) : (
           <View style={styles.budgetContainer}>
             <View style={styles.budgetTextContainer}>
-              <Text style={styles.budgetLabel}>Total Budget</Text>
-              <Text style={styles.budgetAmount}>{formatCurrency(budget.amount)}</Text>
+              <Text style={styles.budgetLabel}>Base Budget</Text>
+              <Text style={styles.budgetAmount}>{formatAmount(budget.amount)}</Text>
             </View>
             <TouchableOpacity 
               style={styles.editButton}
@@ -174,23 +187,33 @@ const BudgetScreen = ({ navigation }) => {
       
       {summary && (
         <View style={styles.summaryContainer}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Spent</Text>
-            <Text style={styles.summaryAmount}>{formatCurrency(summary.totalExpenses)}</Text>
+          {/* Income display */}
+          <View style={styles.incomeSummary}>
+            <Text style={styles.incomeLabel}>Monthly Income</Text>
+            <Text style={styles.incomeAmount}>{formatAmount(summary.totalIncome)}</Text>
+            <Text style={styles.totalBudgetLabel}>Total Budget</Text>
+            <Text style={styles.totalBudgetAmount}>{formatAmount(getTotalBudget())}</Text>
           </View>
           
-          <View style={styles.divider} />
-          
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Remaining</Text>
-            <Text 
-              style={[
-                styles.summaryAmount, 
-                (budget.amount - summary.totalExpenses) < 0 && styles.negative
-              ]}
-            >
-              {formatCurrency(Math.max(0, budget.amount - summary.totalExpenses))}
-            </Text>
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Spent</Text>
+              <Text style={styles.summaryAmount}>{formatAmount(summary.totalExpenses)}</Text>
+            </View>
+            
+            <View style={styles.divider} />
+            
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryLabel}>Available</Text>
+              <Text 
+                style={[
+                  styles.summaryAmount, 
+                  getAvailableBudget() > 0 ? styles.positive : styles.negative
+                ]}
+              >
+                {formatAmount(getAvailableBudget())}
+              </Text>
+            </View>
           </View>
         </View>
       )}
@@ -276,9 +299,9 @@ const BudgetScreen = ({ navigation }) => {
                       </View>
                       <View style={styles.budgetValues}>
                         <Text style={styles.spentText}>
-                          {formatCurrency(categorySpending ? categorySpending.spent : 0)}
+                          {formatAmount(categorySpending ? categorySpending.spent : 0)}
                           <Text style={styles.totalText}>
-                            {' '}/ {formatCurrency(category.budget)}
+                            {' '}/ {formatAmount(category.budget)}
                           </Text>
                         </Text>
                         
@@ -335,6 +358,38 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#007AFF',
   },
+  
+  // New styles for income and total budget
+  incomeSummary: {
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  incomeLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  incomeAmount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 8,
+  },
+  totalBudgetLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  totalBudgetAmount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  
+  // Continue with original styles
   editButton: {
     padding: 8,
   },
@@ -371,7 +426,6 @@ const styles = StyleSheet.create({
     color: '#007AFF',
   },
   summaryContainer: {
-    flexDirection: 'row',
     backgroundColor: '#fff',
     marginTop: 16,
     marginHorizontal: 16,
@@ -382,6 +436,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
+  },
+  summaryRow: {
+    flexDirection: 'row',
   },
   summaryItem: {
     flex: 1,
@@ -395,6 +452,9 @@ const styles = StyleSheet.create({
   summaryAmount: {
     fontSize: 20,
     fontWeight: 'bold',
+  },
+  positive: {
+    color: '#4CAF50',
   },
   negative: {
     color: '#F44336',

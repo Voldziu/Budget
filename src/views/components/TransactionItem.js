@@ -1,9 +1,13 @@
-// src/views/components/TransactionItem.js
+// src/views/components/TransactionItem.js - Updated with currency formatting
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import { useCurrency } from '../../utils/CurrencyContext';
 
 const TransactionItem = ({ transaction, category, onPress }) => {
+  // Get currency formatter from context
+  const { formatAmount } = useCurrency();
+  
   // Format the date to show month and day only
   const formattedDate = new Date(transaction.date).toLocaleDateString('en-US', {
     month: 'short',
@@ -36,15 +40,15 @@ const TransactionItem = ({ transaction, category, onPress }) => {
         </Text>
       </View>
       
-      {/* Amount on the right */}
+      {/* Amount on the right - updated with currency formatting */}
       <View style={styles.amountContainer}>
         <Text 
           style={[
             styles.amount,
-            transaction.isIncome ? styles.incomeText : styles.expenseText
+            transaction.is_income ? styles.incomeText : styles.expenseText
           ]}
         >
-          {transaction.isIncome ? '+' : '-'}${parseFloat(transaction.amount).toFixed(2)}
+          {transaction.is_income ? '+' : '-'}{formatAmount(transaction.amount)}
         </Text>
       </View>
     </TouchableOpacity>

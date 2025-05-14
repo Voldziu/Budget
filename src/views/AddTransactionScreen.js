@@ -1,4 +1,4 @@
-// src/views/AddTransactionScreen.js
+// src/views/AddTransactionScreen.js - Updated with currency and improved income handling
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -13,12 +13,14 @@ import {
   ActivityIndicator
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
+import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
 import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
+import { useCurrency } from '../utils/CurrencyContext';
 
 const AddTransactionScreen = ({ route, navigation }) => {
   // Get transaction if in edit mode
   const editTransaction = route.params?.transaction;
+  const { currency } = useCurrency();
   
   // State variables
   const [amount, setAmount] = useState('');
@@ -33,6 +35,7 @@ const AddTransactionScreen = ({ route, navigation }) => {
     times: 1,
     period: 'week' // day, week, month, year
   });
+  const [isSaving, setIsSaving] = useState(false);
   
   // Controllers
   const categoryController = new SupabaseCategoryController();
@@ -46,9 +49,23 @@ const AddTransactionScreen = ({ route, navigation }) => {
   // Populate form if editing
   useEffect(() => {
     if (editTransaction) {
-      setAmount(editTransaction.amount.toString());
+      // Log the transaction for debugging
+      console.log('Editing transaction:', editTransaction);
+      
+      // Set amount with proper handling
+      const amountValue = typeof editTransaction.amount === 'string' 
+        ? editTransaction.amount 
+        : editTransaction.amount.toString();
+      setAmount(amountValue);
+      
+      // Set other fields
       setDescription(editTransaction.description);
-      setIs_Income(editTransaction.is_income);
+      
+      // Ensure is_income is properly set as a boolean
+      const transactionIsIncome = editTransaction.is_income === true;
+      console.log('Setting is_income to:', transactionIsIncome);
+      setIs_Income(transactionIsIncome);
+      
       setSelectedCategory(editTransaction.category);
       
       // Set recurring if applicable
@@ -66,16 +83,17 @@ const AddTransactionScreen = ({ route, navigation }) => {
     setLoading(true);
     try {
       const allCategories = await categoryController.getAllCategories();
+      console.log('Loaded categories:', allCategories.length);
       setCategories(allCategories);
       
       // Set default category
       if (!selectedCategory && allCategories.length > 0) {
         // Default to first non-income category for expenses, or income category for income
         const defaultCategory = is_income 
-          ? allCategories.find(c => c.name === 'Income') 
-          : allCategories.find(c => c.name !== 'Income');
+          ? allCategories.find(c => c.name === 'Income')?.id 
+          : allCategories.find(c => c.name !== 'Income')?.id;
         
-        setSelectedCategory(defaultCategory?.id);
+        setSelectedCategory(defaultCategory);
       }
     } catch (error) {
       console.error('Error loading categories:', error);
@@ -86,7 +104,10 @@ const AddTransactionScreen = ({ route, navigation }) => {
   
   const handleSave = async () => {
     // Validate input
-    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+    // Create a local variable for the modified amount to accept both 21,37 and 21.37 formats
+    let formattedAmount = amount.replace(',', '.');
+    
+    if (!formattedAmount || isNaN(parseFloat(formattedAmount)) || parseFloat(formattedAmount) <= 0) {
       alert('Please enter a valid amount');
       return;
     }
@@ -101,14 +122,22 @@ const AddTransactionScreen = ({ route, navigation }) => {
       return;
     }
     
+    setIsSaving(true);
+    
     try {
+      // Parse amount as a number with 2 decimal places
+      const parsedAmount = Math.round(parseFloat(formattedAmount) * 100) / 100;
+      
       const transactionData = {
-        amount: parseFloat(amount),
+        amount: parsedAmount,
         description,
         category: selectedCategory,
-        is_income,
+        is_income: is_income, // Ensure this is properly set as boolean
         date: new Date().toISOString(),
       };
+      
+      console.log('Saving transaction with data:', transactionData);
+      console.log('is_income type:', typeof is_income, 'value:', is_income);
       
       // Add recurring information if enabled
       if (recurring) {
@@ -121,12 +150,14 @@ const AddTransactionScreen = ({ route, navigation }) => {
       
       if (editTransaction) {
         // Update existing transaction
+        console.log('Updating transaction:', editTransaction.id);
         await transactionController.updateTransaction(
           editTransaction.id,
           transactionData
         );
       } else {
         // Add new transaction
+        console.log('Adding new transaction');
         await transactionController.addTransaction(transactionData);
       }
       
@@ -134,21 +165,24 @@ const AddTransactionScreen = ({ route, navigation }) => {
     } catch (error) {
       console.error('Error saving transaction:', error);
       alert('Failed to save transaction. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
   
   const toggleTransactionType = () => {
+    console.log('Toggling transaction type from:', is_income, 'to:', !is_income);
     setIs_Income(!is_income);
     
     // Switch to appropriate default category
     if (is_income) {
       // Switching to expense, find first non-income category
-      const expenseCategory = categories.find(c => c.name !== 'Income');
-      setSelectedCategory(expenseCategory?.id);
+      const expenseCategory = categories.find(c => c.name !== 'Income')?.id;
+      setSelectedCategory(expenseCategory);
     } else {
       // Switching to income, find income category
-      const incomeCategory = categories.find(c => c.name === 'Income');
-      setSelectedCategory(incomeCategory?.id);
+      const incomeCategory = categories.find(c => c.name === 'Income')?.id;
+      setSelectedCategory(incomeCategory);
     }
   };
   
@@ -197,11 +231,11 @@ const AddTransactionScreen = ({ route, navigation }) => {
           </TouchableOpacity>
         </View>
         
-        {/* Amount Input */}
+        {/* Amount Input - Updated with currency symbol */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Amount</Text>
           <View style={styles.amountInputContainer}>
-            <Text style={styles.currencySymbol}>$</Text>
+            <Text style={styles.currencySymbol}>{currency.symbol}</Text>
             <TextInput
               style={styles.amountInput}
               keyboardType="decimal-pad"
@@ -419,10 +453,18 @@ const AddTransactionScreen = ({ route, navigation }) => {
         )}
         
         {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>
-            {editTransaction ? 'Update' : 'Add'} Transaction
-          </Text>
+        <TouchableOpacity 
+          style={styles.saveButton} 
+          onPress={handleSave}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Text style={styles.saveButtonText}>
+              {editTransaction ? 'Update' : 'Add'} Transaction
+            </Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -430,6 +472,7 @@ const AddTransactionScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  // Keeping existing styles...
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
