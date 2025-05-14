@@ -51,7 +51,7 @@ const SettingsScreen = ({ navigation }) => {
               // 1. Delete transactions
               const { error: transError } = await supabase
                 .from(TABLES.TRANSACTIONS)
-                .delete()
+                .truncate()
                 .eq('user_id', user.id);
                 
               if (transError) {
