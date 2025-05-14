@@ -1,4 +1,4 @@
-// src/views/HomeScreen.js
+// src/views/HomeScreen.js - Updated with monthly budget display
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { SupabaseBudgetController } from '../controllers/SupabaseBudgetController';
@@ -6,6 +6,7 @@ import { SupabaseTransactionController } from '../controllers/SupabaseTransactio
 import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
 import TransactionItem from './components/TransactionItem';
 import BudgetSummary from './components/BudgetSummary';
+import { useCurrency } from '../utils/CurrencyContext';
 
 const HomeScreen = ({ navigation }) => {
   const [summary, setSummary] = useState(null);
@@ -16,6 +17,9 @@ const HomeScreen = ({ navigation }) => {
   const budgetController = new SupabaseBudgetController();
   const transactionController = new SupabaseTransactionController();
   const categoryController = new SupabaseCategoryController();
+  
+  // Get currency formatter
+  const { formatAmount } = useCurrency();
   
   useEffect(() => {
     loadData();
@@ -48,12 +52,20 @@ const HomeScreen = ({ navigation }) => {
       
       // Get recent transactions
       const transactions = await transactionController.getAllTransactions();
+      
+      // Debug income vs expense counts in transactions
+      const incomeCount = transactions.filter(t => t.is_income === true).length;
+      const expenseCount = transactions.filter(t => t.is_income === false).length;
+      console.log(`Home screen - Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
+      
       const recent = transactions
         .sort((a, b) => new Date(b.date) - new Date(a.date))
         .slice(0, 5);
       
       setSummary(spendingSummary);
       setRecentTransactions(recent);
+      
+      console.log('Home data loaded successfully');
     } catch (error) {
       console.error('Error loading home data:', error);
       Alert.alert('Error', 'Failed to load data. Please try again.');

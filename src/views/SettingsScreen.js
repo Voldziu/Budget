@@ -1,4 +1,4 @@
-// Updated SettingsScreen.js with correct navigation code
+// src/views/SettingsScreen.js - Updated with currency selection
 import React, { useState } from 'react';
 import {
   View,
@@ -8,19 +8,71 @@ import {
   Alert,
   ScrollView,
   Switch,
-  ActivityIndicator
+  ActivityIndicator,
+  Modal
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Feather';
 import { AuthService } from '../services/AuthService';
 import { supabase, TABLES } from '../utils/supabase';
 import { CommonActions } from '@react-navigation/native';
+import { useCurrency, CURRENCIES } from '../utils/CurrencyContext';
 
 const SettingsScreen = ({ navigation }) => {
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
   const authService = new AuthService();
+  
+  // Get currency context
+  const { currency, changeCurrency, availableCurrencies } = useCurrency();
+  
+  // Currency selection modal
+  const CurrencySelectionModal = () => (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={currencyModalVisible}
+      onRequestClose={() => setCurrencyModalVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Select Currency</Text>
+          
+          {Object.values(availableCurrencies).map((curr) => (
+            <TouchableOpacity
+              key={curr.code}
+              style={[
+                styles.currencyOption,
+                currency.code === curr.code && styles.selectedCurrencyOption
+              ]}
+              onPress={() => {
+                changeCurrency(curr.code);
+                setCurrencyModalVisible(false);
+              }}
+            >
+              <Text style={styles.currencySymbol}>{curr.symbol}</Text>
+              <View style={styles.currencyInfo}>
+                <Text style={styles.currencyCode}>{curr.code}</Text>
+                <Text style={styles.currencyName}>{curr.name}</Text>
+              </View>
+              {currency.code === curr.code && (
+                <Icon name="check" size={22} color="#007AFF" />
+              )}
+            </TouchableOpacity>
+          ))}
+          
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setCurrencyModalVisible(false)}
+          >
+            <Text style={styles.closeButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
   
   // New selective data clearing function with fixed navigation
   const clearAppData = async () => {
@@ -51,7 +103,7 @@ const SettingsScreen = ({ navigation }) => {
               // 1. Delete transactions
               const { error: transError } = await supabase
                 .from(TABLES.TRANSACTIONS)
-                .truncate()
+                .delete()
                 .eq('user_id', user.id);
                 
               if (transError) {
@@ -155,6 +207,8 @@ const SettingsScreen = ({ navigation }) => {
   
   return (
     <ScrollView style={styles.container}>
+      <CurrencySelectionModal />
+      
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferences</Text>
         
@@ -183,6 +237,23 @@ const SettingsScreen = ({ navigation }) => {
             thumbColor="#fff"
           />
         </View>
+        
+        {/* Currency Selection Setting */}
+        <TouchableOpacity 
+          style={styles.settingItem}
+          onPress={() => setCurrencyModalVisible(true)}
+        >
+          <View style={styles.settingInfo}>
+            <Icon name="dollar-sign" size={20} color="#666" style={styles.settingIcon} />
+            <Text style={styles.settingText}>Currency</Text>
+          </View>
+          <View style={styles.currencySelector}>
+            <Text style={styles.currencyText}>
+              {currency.symbol} {currency.code}
+            </Text>
+            <Icon name="chevron-right" size={20} color="#999" />
+          </View>
+        </TouchableOpacity>
       </View>
       
       <View style={styles.section}>
@@ -321,6 +392,81 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   signOutText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Currency selector styles
+  currencySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  currencyText: {
+    fontSize: 16,
+    color: '#007AFF',
+    marginRight: 4,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContent: {
+    width: '90%',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  currencyOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  selectedCurrencyOption: {
+    backgroundColor: '#f0f9ff',
+  },
+  currencySymbol: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    width: 30,
+    textAlign: 'center',
+  },
+  currencyInfo: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  currencyCode: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  currencyName: {
+    color: '#666',
+    fontSize: 14,
+  },
+  closeButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  closeButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

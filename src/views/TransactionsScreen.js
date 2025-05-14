@@ -1,4 +1,4 @@
-// src/views/TransactionsScreen.js
+// src/views/TransactionsScreen.js - Fixed with proper income/expense filtering
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
@@ -31,6 +31,11 @@ const TransactionsScreen = ({ navigation }) => {
       const allTransactions = await transactionController.getAllTransactions();
       const allCategories = await categoryController.getAllCategories();
       
+      // Debug income vs expense counts
+      const incomeCount = allTransactions.filter(t => t.is_income === true).length;
+      const expenseCount = allTransactions.filter(t => t.is_income === false).length;
+      console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
+      
       setTransactions(
         allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date))
       );
@@ -48,10 +53,11 @@ const TransactionsScreen = ({ navigation }) => {
   };
   
   const filteredTransactions = () => {
+    // Using strict equality check for is_income
     if (filter === 'income') {
-      return transactions.filter(t => t.isIncome);
+      return transactions.filter(t => t.is_income === true);
     } else if (filter === 'expense') {
-      return transactions.filter(t => !t.isIncome);
+      return transactions.filter(t => t.is_income === false);
     }
     return transactions;
   };

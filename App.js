@@ -1,4 +1,4 @@
-// Updated App.js with correct navigator references
+// Update App.js to verify screen names in the navigator
 import React, { useState, useEffect, useRef } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -10,6 +10,7 @@ import 'react-native-gesture-handler';
 import 'react-native-url-polyfill/auto';
 import { supabase } from './src/utils/supabase';
 import { AuthService } from './src/services/AuthService';
+import { CurrencyProvider } from './src/utils/CurrencyContext';
 
 // Import screens
 import HomeScreen from './src/views/HomeScreen';
@@ -78,6 +79,43 @@ const MainTabs = () => {
       <Tab.Screen name="Budget" component={BudgetScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
+  );
+};
+
+// Custom stack navigator that includes the AddTransaction screen outside MainTabs
+// This ensures it's accessible from both MainTabs and TransactionDetailScreen
+const AppNavigator = ({ isAuthenticated }) => {
+  if (!isAuthenticated) {
+    return (
+      <Stack.Navigator>
+        <Stack.Screen 
+          name="Auth" 
+          component={AuthNavigator} 
+          options={{ headerShown: false }}
+        />
+      </Stack.Navigator>
+    );
+  }
+  
+  return (
+    <Stack.Navigator>
+      <Stack.Screen 
+        name="MainApp" 
+        component={MainTabs} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="TransactionDetail" 
+        component={TransactionDetailScreen}
+        options={{ title: 'Transaction Details' }}
+      />
+      {/* Add this screen to the Stack Navigator */}
+      <Stack.Screen 
+        name="AddTransactionScreen" 
+        component={AddTransactionScreen}
+        options={{ title: 'Edit Transaction' }}
+      />
+    </Stack.Navigator>
   );
 };
 
@@ -204,32 +242,11 @@ const App = () => {
   // Main app rendering
   return (
     <SafeAreaProvider>
-      <NavigationContainer ref={navigationRef}>
-        <Stack.Navigator>
-          {!isAuthenticated ? (
-            // Auth flow
-            <Stack.Screen 
-              name="Auth" 
-              component={AuthNavigator} 
-              options={{ headerShown: false }}
-            />
-          ) : (
-            // App flow
-            <>
-              <Stack.Screen 
-                name="MainApp" // Changed from "Main" to "MainApp" to avoid confusion
-                component={MainTabs} 
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen 
-                name="TransactionDetail" 
-                component={TransactionDetailScreen}
-                options={{ title: 'Transaction Details' }}
-              />
-            </>
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
+      <CurrencyProvider>
+        <NavigationContainer ref={navigationRef}>
+          <AppNavigator isAuthenticated={isAuthenticated} />
+        </NavigationContainer>
+      </CurrencyProvider>
     </SafeAreaProvider>
   );
 };
