@@ -1,5 +1,15 @@
 class Transaction {
-  constructor(id, amount, category, description, date, is_income, recurring = false, frequency = null, customFrequency = null) {
+  constructor(id, 
+    amount, 
+    category, 
+    description,
+    date, 
+    is_income, 
+    recurring = false, 
+    frequency = null, 
+    customFrequency = null,
+    receiptImage = null
+  ) {
     this.id = id;
     this.amount = amount;
     this.category = category;
@@ -9,5 +19,6 @@ class Transaction {
     this.recurring = recurring;
     this.frequency = frequency; // 'daily', 'weekly', 'monthly', 'custom'
     this.customFrequency = customFrequency; // { times: number, period: 'day'|'week'|'month' }
+    this.receiptImage = receiptImage;
   }
 }
