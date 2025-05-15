@@ -63,7 +63,7 @@ def process_receipt():
         if not receipt_text:
             return jsonify({'error': 'Nie udało się odczytać tekstu z obrazu'}), 400
 
-        products = parse_receipt(receipt_text, categories, api_key='AIzaSyAdk5iX6V5gtaMgkOaz5FF2ySznYGbPtIQ')
+        products = parse_receipt(receipt_text, categories, api_key='API_KEY')
         total_price = sum(product['price'] for product in products)
 
         categorized_products = {}
