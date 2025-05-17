@@ -37,6 +37,8 @@ const AVAILABLE_COLORS = [
   '#607D8B', '#F44336', '#FFEB3B', '#8BC34A', '#03A9F4'
 ];
 
+const URL = "https://receipts-production.up.railway.app/"
+
 const AddTransactionScreen = ({ route, navigation }) => {
   // Get transaction if in edit mode
   const editTransaction = route.params?.transaction;
@@ -280,7 +282,7 @@ const handleAnalyzeReceipt = async () => {
     console.log('Sending receipt for analysis with categories:', JSON.stringify(categoriesToSend));
     
     // Make API call to your backend
-    const response = await fetch('http://10.0.2.2:5000/api/receipt', {
+    const response = await fetch(URL+"/api/receipt", {
       method: 'POST',
       body: formData,
       headers: {
