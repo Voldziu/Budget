@@ -1,8 +1,9 @@
 import google.generativeai as genai
 import re
 
-def parse_receipt(receipt_text, categories, api_key="AIzaSyAdk5iX6V5gtaMgkOaz5FF2ySznYGbPtIQ"):
 
+def parse_receipt(receipt_text, categories,api_key=None):
+    
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.0-flash')
     
@@ -54,8 +55,7 @@ def parse_receipt(receipt_text, categories, api_key="AIzaSyAdk5iX6V5gtaMgkOaz5FF
     return products
 
 
-def parse_tester(receipt_text, categories, api_key="AIzaSyAdk5iX6V5gtaMgkOaz5FF2ySznYGbPtIQ"):
-
+def parse_tester(receipt_text, categories):
     products = [
         {
             'name': 'Chleb pszenny',

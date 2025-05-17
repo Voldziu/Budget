@@ -30,6 +30,7 @@ EXPOSE 5000
 
 # Set environment variable for Python path
 ENV PYTHONPATH=/app
+ENV GOOGLE_API_KEY=""
 
 # Command to run the application
 CMD ["python", "api/index.py"]

@@ -60,7 +60,7 @@ def handle_process_receipt(request):
         if not receipt_text:
             return {'error': 'Failed to read text from image'}, 400
 
-        products = parse_receipt(receipt_text, categories, api_key='API_KEY')
+        products = parse_receipt(receipt_text, categories,api_key = os.environ.get("GOOGLE_API_KEY"))
         total_price = sum(product['price'] for product in products)
 
         categorized_products = {}
