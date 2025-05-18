@@ -1,4 +1,4 @@
-// src/views/AddTransactionScreen.js - Updated with custom category creation and receipt image functionality
+// src/views/AddTransactionScreen.js - Complete implementation with parent-child transaction support
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -22,6 +22,9 @@ import { useCurrency } from '../utils/CurrencyContext';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import ReceiptAnalysisModal from './components/ReceiptAnalysisModal';
 
+// Constant for API URL
+const URL = "https://receipts-production.up.railway.app";
+
 // Array of available icons for categories
 const AVAILABLE_ICONS = [
   'shopping-cart', 'home', 'film', 'truck', 'dollar-sign', 
@@ -37,8 +40,6 @@ const AVAILABLE_COLORS = [
   '#607D8B', '#F44336', '#FFEB3B', '#8BC34A', '#03A9F4'
 ];
 
-const URL = "https://receipts-production.up.railway.app/"
-
 const AddTransactionScreen = ({ route, navigation }) => {
   // Get transaction if in edit mode
   const editTransaction = route.params?.transaction;
@@ -52,14 +53,14 @@ const AddTransactionScreen = ({ route, navigation }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [recurring, setRecurring] = useState(false);
-  const [frequency, setFrequency] = useState('monthly'); // monthly, weekly, daily, custom
+  const [frequency, setFrequency] = useState('monthly');
   const [customFrequency, setCustomFrequency] = useState({
     times: 1,
-    period: 'week' // day, week, month, year
+    period: 'week'
   });
   const [isSaving, setIsSaving] = useState(false);
   
-  // New state variables for custom category creation
+  // Category modal state
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState('shopping-cart');
@@ -70,10 +71,10 @@ const AddTransactionScreen = ({ route, navigation }) => {
   // Receipt image state
   const [receiptImage, setReceiptImage] = useState(null);
   const [showReceiptOptions, setShowReceiptOptions] = useState(false);
-  // New state for receipt analysis
   const [isAnalyzingReceipt, setIsAnalyzingReceipt] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [analysisResults, setAnalysisResults] = useState([]);
+  const [storeName, setStoreName] = useState('');
   
   // Controllers
   const categoryController = new SupabaseCategoryController();
@@ -87,8 +88,18 @@ const AddTransactionScreen = ({ route, navigation }) => {
   // Populate form if editing
   useEffect(() => {
     if (editTransaction) {
-      // Log the transaction for debugging
+      // Handle editing an existing transaction (but not for parent transactions)
       console.log('Editing transaction:', editTransaction);
+      
+      // Skip loading if it's a parent transaction - those should only be viewable
+      if (editTransaction.is_parent) {
+        Alert.alert(
+          'Cannot Edit',
+          'Receipt transactions cannot be edited directly. Please view or edit individual items.',
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+        return;
+      }
       
       // Set amount with proper handling
       const amountValue = typeof editTransaction.amount === 'string' 
@@ -120,7 +131,7 @@ const AddTransactionScreen = ({ route, navigation }) => {
         }
       }
     }
-  }, [editTransaction]);
+  }, [editTransaction, navigation]);
   
   const loadData = async () => {
     setLoading(true);
@@ -247,134 +258,105 @@ const AddTransactionScreen = ({ route, navigation }) => {
     setReceiptImage(null);
   };
   
-
-// Pomocnicza funkcja do ekstrakcji nazw kategorii
-const parse_categories_to_names = (categories) => {
-  return categories.map(category => category.name);
-};
-
-// New function to analyze receipt
-const handleAnalyzeReceipt = async () => {
-  if (!receiptImage) {
-    Alert.alert('Error', 'No receipt image to analyze');
-    return;
-  }
+  // Helper function to extract category names
+  const parse_categories_to_names = (categories) => {
+    return categories.map(category => category.name);
+  };
   
-  setIsAnalyzingReceipt(true);
-  
-  try {
-    // Create a form data object to send to the backend
-    const formData = new FormData();
-    
-    // Append the image
-    formData.append('receipt', {
-      uri: receiptImage.uri,
-      type: receiptImage.type || 'image/jpeg',
-      name: receiptImage.fileName || 'receipt.jpg'
-    });
-    
-    // Prepare category names to send
-    const categoriesToSend = parse_categories_to_names(categories);
-
-    // Append the user's categories as JSON
-    formData.append('categories', JSON.stringify(categoriesToSend));
-    
-    console.log('Sending receipt for analysis with categories:', JSON.stringify(categoriesToSend));
-    
-    // Make API call to your backend
-    const response = await fetch(URL+"/api/receipt", {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to analyze receipt');
+  // Analyze receipt to extract products and create parent-child transactions
+  const handleAnalyzeReceipt = async () => {
+    if (!receiptImage) {
+      Alert.alert('Error', 'No receipt image to analyze');
+      return;
     }
     
-    const data = await response.json();
-    console.log('Receipt analysis result:', data);
+    setIsAnalyzingReceipt(true);
     
-    // Set the analysis results for the modal
-    if (data.categorized_products) {
-      // Format the products data for the modal
-      const products = [];
+    try {
+      // Create a form data object to send to the backend
+      const formData = new FormData();
       
-      // Loop through categories and their products
-      Object.entries(data.categorized_products).forEach(([categoryName, categoryProducts]) => {
-        // Add each product with its category
-        categoryProducts.forEach(product => {
-          products.push({
-            name: product.name,
-            category: categoryName,
-            price: product.price
-          });
-        });
+      // Append the image
+      formData.append('receipt', {
+        uri: receiptImage.uri,
+        type: receiptImage.type || 'image/jpeg',
+        name: receiptImage.fileName || 'receipt.jpg'
       });
       
-      setAnalysisResults(products);
-      setShowAnalysisModal(true);
-    } else {
-      // Fallback for simple product list if no categories
-      if (data.products && Array.isArray(data.products)) {
-        setAnalysisResults(data.products);
+      // Prepare category names to send
+      const categoriesToSend = parse_categories_to_names(categories);
+      
+      // Append the user's categories as JSON
+      formData.append('categories', JSON.stringify(categoriesToSend));
+      
+      console.log('Sending receipt for analysis with categories:', JSON.stringify(categoriesToSend));
+      
+      // Make API call to your backend
+      const response = await fetch(`${URL}/api/receipt`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to analyze receipt');
+      }
+      
+      const data = await response.json();
+      console.log('Receipt analysis result:', data);
+      
+      // Try to extract store name from description
+      if (data.description) {
+        setStoreName(data.description.replace('Paragon sklepowy', '').trim());
+      }
+      
+      // Set the analysis results for the modal
+      if (data.categorized_products) {
+        // Format the products data for the modal
+        const products = [];
+        
+        // Loop through categories and their products
+        Object.entries(data.categorized_products).forEach(([categoryName, categoryProducts]) => {
+          // Add each product with its category
+          categoryProducts.forEach(product => {
+            products.push({
+              name: product.name,
+              category: categoryName,
+              price: product.price
+            });
+          });
+        });
+        
+        setAnalysisResults(products);
         setShowAnalysisModal(true);
       } else {
-        // If no product data found, show information message
-        Alert.alert('No products found', 'The receipt analysis did not detect any products. Please enter details manually.');
+        // Fallback for simple product list if no categories
+        if (data.products && Array.isArray(data.products)) {
+          setAnalysisResults(data.products);
+          setShowAnalysisModal(true);
+        } else {
+          // If no product data found, show information message
+          Alert.alert('No products found', 'The receipt analysis did not detect any products. Please enter details manually.');
+        }
       }
-    }
-    
-  } catch (error) {
-    console.error('Error analyzing receipt:', error);
-    Alert.alert('Error', 'Failed to analyze receipt. Please try again or enter details manually.');
-  } finally {
-    setIsAnalyzingReceipt(false);
-  }
-};
-
-const handleSaveAnalysis = (editedProducts) => {
-  // Calculate total amount
-  const totalAmount = editedProducts.reduce(
-    (sum, product) => sum + parseFloat(product.price), 
-    0
-  ).toFixed(2);
-  
-  // Set the amount in the form
-  setAmount(totalAmount);
-  
-  // Set description based on the store name or top products
-  if (editedProducts.length > 0) {
-    const topProducts = editedProducts
-      .slice(0, 2)
-      .map(p => p.name)
-      .join(', ');
       
-    setDescription(description || `Receipt: ${topProducts}${editedProducts.length > 2 ? '...' : ''}`);
-  }
-  
-  // Try to find the best category based on the most expensive product
-  if (editedProducts.length > 0 && !is_income) {
-    // Sort products by price (highest first)
-    const sortedProducts = [...editedProducts].sort((a, b) => b.price - a.price);
-    const topProductCategory = sortedProducts[0].category;
-    
-    // Find category with matching name
-    const matchedCategory = categories.find(
-      c => c.name.toLowerCase() === topProductCategory.toLowerCase()
-    );
-    
-    if (matchedCategory) {
-      setSelectedCategory(matchedCategory.id);
+    } catch (error) {
+      console.error('Error analyzing receipt:', error);
+      Alert.alert('Error', 'Failed to analyze receipt. Please try again or enter details manually.');
+    } finally {
+      setIsAnalyzingReceipt(false);
     }
-  }
-};
-
-
+  };
   
   const handleSave = async () => {
+    // Skip parent transactions
+    if (editTransaction && editTransaction.is_parent) {
+      navigation.goBack();
+      return;
+    }
+    
     // Validate input
     // Create a local variable for the modified amount to accept both 21,37 and 21.37 formats
     let formattedAmount = amount.replace(',', '.');
@@ -416,6 +398,9 @@ const handleSaveAnalysis = (editedProducts) => {
         category: categoryId,
         is_income: is_income, // Ensure this is properly set as boolean
         date: new Date().toISOString(),
+        // Parent-child fields
+        is_parent: false,
+        parent_id: null,
       };
       
       // Add receipt image if available
@@ -472,7 +457,7 @@ const handleSaveAnalysis = (editedProducts) => {
       setLoading(true);
       
       // Check if category is being used in any transactions
-      const transactions = await transactionController.getAllTransactions();
+      const transactions = await transactionController.getAllTransactions(true);
       const isUsed = transactions.some(t => t.category === categoryId);
       
       if (isUsed) {
@@ -1012,52 +997,20 @@ const handleSaveAnalysis = (editedProducts) => {
         </View>
       </Modal>
       
-      {/* Receipt Options Modal */}
-      <Modal
-        visible={showReceiptOptions}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowReceiptOptions(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.receiptOptionsContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Receipt</Text>
-              <TouchableOpacity
-                onPress={() => setShowReceiptOptions(false)}
-                style={styles.closeButton}
-              >
-                <Icon name="x" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-            
-            <TouchableOpacity
-              style={styles.receiptOptionItem}
-              onPress={() => {
-                setShowReceiptOptions(false);
-                handleChooseFromLibrary();
-              }}
-            >
-              <Icon name="image" size={24} color="#007AFF" />
-              <Text style={styles.receiptOptionText}>Choose from Gallery</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-          <ReceiptAnalysisModal
-      visible={showAnalysisModal}
-      onClose={() => setShowAnalysisModal(false)}
-      receiptData={analysisResults}
-      categories={categories}
-      onSave={handleSaveAnalysis}
-    />
+      {/* Receipt Analysis Modal */}
+      <ReceiptAnalysisModal
+        visible={showAnalysisModal}
+        onClose={() => setShowAnalysisModal(false)}
+        receiptData={analysisResults}
+        categories={categories}
+        receiptImage={receiptImage}
+        storeName={storeName}
+      />
     </KeyboardAvoidingView>
   );
 };
 
-
 const styles = StyleSheet.create({
-  // Keeping existing styles...
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -1106,21 +1059,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: '#333',
   },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  addCategoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  addCategoryText: {
-    color: '#007AFF',
-    marginLeft: 4,
-    fontWeight: '500',
-  },
   input: {
     backgroundColor: '#fff',
     borderWidth: 1,
@@ -1147,6 +1085,22 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     fontSize: 20,
+  },
+  categoryHeaderContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  addCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 6,
+  },
+  addCategoryButtonText: {
+    marginLeft: 4,
+    color: '#007AFF',
+    fontWeight: '500',
   },
   categoryScroll: {
     flexDirection: 'row',
@@ -1178,7 +1132,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  // Receipt image styles
+  deleteCategoryButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    padding: 4,
+  },
   receiptButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1209,22 +1168,32 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: '#ddd',
   },
-  thumbnailOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 8,
+  receiptImageButtonsContainer: {
+    flexDirection: 'column',
+    marginLeft: 16,
   },
   clearImageButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 16,
   },
   clearImageText: {
     color: '#FF3B30',
     marginLeft: 4,
     fontWeight: '500',
+  },
+  analyzeReceiptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4CAF50',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+  analyzeReceiptButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    marginLeft: 8,
   },
   switchContainer: {
     flexDirection: 'row',
@@ -1322,24 +1291,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-   categoryHeaderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  addCategoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 6,
-  },
-  addCategoryButtonText: {
-    marginLeft: 4,
-    color: '#007AFF',
-    fontWeight: '500',
-  },
-  
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1366,8 +1317,6 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
-  
-  // Icon selection styles
   iconScroll: {
     flexDirection: 'row',
     marginBottom: 16,
@@ -1384,8 +1333,6 @@ const styles = StyleSheet.create({
   selectedIconItem: {
     backgroundColor: '#007AFF',
   },
-  
-  // Color selection styles
   colorScroll: {
     flexDirection: 'row',
     marginBottom: 16,
@@ -1402,8 +1349,6 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#333',
   },
-  
-  // Create button style
   createButton: {
     backgroundColor: '#007AFF',
     borderRadius: 8,
@@ -1415,54 +1360,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-  },
-  
-  // Receipt options modal
-  receiptOptionsContainer: {
-    width: '90%',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
-  },
-  receiptOptionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  receiptOptionText: {
-    marginLeft: 12,
-    fontSize: 16,
-    color: '#333',
-  },
-  
-  // Delete category button
-  deleteCategoryButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    padding: 4,
-  },
-  
-  // New styles for the receipt image functionality
-  receiptImageButtonsContainer: {
-    flexDirection: 'column',
-    marginLeft: 16,
-  },
-  analyzeReceiptButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4CAF50',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 12,
-  },
-  analyzeReceiptButtonText: {
-    color: '#fff',
-    fontWeight: '600',
-    marginLeft: 8,
   },
 });
 

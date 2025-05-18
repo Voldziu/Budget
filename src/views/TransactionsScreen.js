@@ -1,9 +1,10 @@
-// src/views/TransactionsScreen.js - Fixed with proper income/expense filtering
+// src/views/TransactionsScreen.js - Updated to handle parent-child transactions
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
 import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
 import TransactionItem from './components/TransactionItem';
+import TransactionGroupItem from './components/TransactionGroupItem';
 import Icon from 'react-native-vector-icons/Feather';
 
 const TransactionsScreen = ({ navigation }) => {
@@ -11,6 +12,9 @@ const TransactionsScreen = ({ navigation }) => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all', 'income', 'expense'
+  const [expandedParents, setExpandedParents] = useState({});
+  const [childTransactions, setChildTransactions] = useState({});
+  const [loadingChildren, setLoadingChildren] = useState({});
   
   const transactionController = new SupabaseTransactionController();
   const categoryController = new SupabaseCategoryController();
@@ -34,12 +38,18 @@ const TransactionsScreen = ({ navigation }) => {
       // Debug income vs expense counts
       const incomeCount = allTransactions.filter(t => t.is_income === true).length;
       const expenseCount = allTransactions.filter(t => t.is_income === false).length;
-      console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
+      const parentCount = allTransactions.filter(t => t.is_parent === true).length;
+      
+      console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}, Parent transactions: ${parentCount}`);
       
       setTransactions(
         allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date))
       );
       setCategories(allCategories);
+      
+      // Reset expanded state
+      setExpandedParents({});
+      setChildTransactions({});
     } catch (error) {
       console.error('Error loading transactions:', error);
       Alert.alert('Error', 'Failed to load transactions. Please try again.');
@@ -54,12 +64,77 @@ const TransactionsScreen = ({ navigation }) => {
   
   const filteredTransactions = () => {
     // Using strict equality check for is_income
+    let filtered = [];
+    
     if (filter === 'income') {
-      return transactions.filter(t => t.is_income === true);
+      filtered = transactions.filter(t => t.is_income === true);
     } else if (filter === 'expense') {
-      return transactions.filter(t => t.is_income === false);
+      filtered = transactions.filter(t => t.is_income === false);
+    } else {
+      filtered = transactions;
     }
-    return transactions;
+    
+    return filtered;
+  };
+  
+  const handleExpandParent = async (parentId) => {
+    // Toggle expanded state
+    const newExpandedState = !expandedParents[parentId];
+    setExpandedParents({...expandedParents, [parentId]: newExpandedState});
+    
+    // If already expanded, just toggle the UI state
+    if (!newExpandedState || childTransactions[parentId]) {
+      return;
+    }
+    
+    // Mark as loading children
+    setLoadingChildren({...loadingChildren, [parentId]: true});
+    
+    try {
+      // Fetch child transactions
+      const children = await transactionController.getChildTransactions(parentId);
+      
+      // Enhance child transactions with category names
+      const enhancedChildren = children.map(child => ({
+        ...child,
+        categoryName: getCategoryById(child.category).name
+      }));
+      
+      // Add to state
+      setChildTransactions({
+        ...childTransactions,
+        [parentId]: enhancedChildren
+      });
+    } catch (error) {
+      console.error('Error loading child transactions:', error);
+      Alert.alert('Error', 'Failed to load transaction details.');
+    } finally {
+      setLoadingChildren({...loadingChildren, [parentId]: false});
+    }
+  };
+  
+  const renderTransaction = ({item}) => {
+    // For parent transactions (receipt transactions)
+    if (item.is_parent) {
+      return (
+        <TransactionGroupItem
+          transaction={item}
+          onPress={() => navigation.navigate('TransactionDetail', { id: item.id })}
+          onExpand={() => handleExpandParent(item.id)}
+          isExpanded={!!expandedParents[item.id]}
+          childTransactions={childTransactions[item.id] || []}
+        />
+      );
+    }
+    
+    // For regular transactions
+    return (
+      <TransactionItem
+        transaction={item}
+        category={getCategoryById(item.category)}
+        onPress={() => navigation.navigate('TransactionDetail', { id: item.id })}
+      />
+    );
   };
   
   if (loading) {
@@ -98,13 +173,7 @@ const TransactionsScreen = ({ navigation }) => {
       <FlatList
         data={filteredTransactions()}
         keyExtractor={(item) => item.id.toString()}
-        renderItem={({ item }) => (
-          <TransactionItem
-            transaction={item}
-            category={getCategoryById(item.category)}
-            onPress={() => navigation.navigate('TransactionDetail', { id: item.id })}
-          />
-        )}
+        renderItem={renderTransaction}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <Icon name="inbox" size={48} color="#ddd" />

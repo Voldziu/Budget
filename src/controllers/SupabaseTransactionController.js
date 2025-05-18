@@ -1,7 +1,39 @@
-// src/controllers/SupabaseTransactionController.js - Added getTransactionById method
+// src/controllers/SupabaseTransactionController.js - Added parent-child transaction methods
 import { supabase, TABLES, getAuthenticatedUser } from '../utils/supabase';
 
 export class SupabaseTransactionController {
+  // Get child transactions for a parent transaction
+  async getChildTransactions(parentId) {
+    try {
+      console.log('Fetching child transactions for parent:', parentId);
+      
+      const user = await getAuthenticatedUser();
+      
+      if (!user) {
+        console.error('No authenticated user found when trying to fetch child transactions');
+        return [];
+      }
+      
+      const { data, error } = await supabase
+        .from(TABLES.TRANSACTIONS)
+        .select('*')
+        .eq('parent_id', parentId)
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching child transactions:', error.message);
+        throw error;
+      }
+      
+      console.log(`Found ${data?.length || 0} child transactions`);
+      return data || [];
+    } catch (error) {
+      console.error('Error in getChildTransactions:', error);
+      return [];
+    }
+  }
+
   // Get transaction by ID - added for TransactionDetailScreen
   async getTransactionById(id) {
     try {
@@ -39,7 +71,7 @@ export class SupabaseTransactionController {
     }
   }
 
-  // Delete transaction method - also needed for TransactionDetailScreen
+  // Delete transaction method - Updated to handle parent transactions
   async deleteTransaction(id) {
     try {
       console.log('Deleting transaction:', id);
@@ -54,7 +86,7 @@ export class SupabaseTransactionController {
       // First verify the transaction belongs to this user
       const { data: existingTransaction, error: checkError } = await supabase
         .from(TABLES.TRANSACTIONS)
-        .select('id')
+        .select('id, is_parent')
         .eq('id', id)
         .eq('user_id', user.id)
         .single();
@@ -64,6 +96,23 @@ export class SupabaseTransactionController {
         throw new Error('Transaction not found or not owned by current user');
       }
       
+      // If it's a parent transaction, delete all child transactions first
+      if (existingTransaction.is_parent) {
+        console.log('Deleting child transactions for parent:', id);
+        
+        const { error: childDeleteError } = await supabase
+          .from(TABLES.TRANSACTIONS)
+          .delete()
+          .eq('parent_id', id)
+          .eq('user_id', user.id);
+        
+        if (childDeleteError) {
+          console.error('Error deleting child transactions:', childDeleteError.message);
+          throw childDeleteError;
+        }
+      }
+      
+      // Now delete the transaction itself
       const { error } = await supabase
         .from(TABLES.TRANSACTIONS)
         .delete()
@@ -84,7 +133,8 @@ export class SupabaseTransactionController {
   }
 
   // Get all transactions with improved auth and error handling
-  async getAllTransactions() {
+  // Updated to filter child transactions by default
+  async getAllTransactions(includeChildren = false) {
     try {
       const user = await getAuthenticatedUser();
       
@@ -95,11 +145,19 @@ export class SupabaseTransactionController {
       
       console.log('Fetching transactions for user:', user.id);
       
-      const { data, error } = await supabase
+      // Build query
+      let query = supabase
         .from(TABLES.TRANSACTIONS)
         .select('*')
-        .eq('user_id', user.id)
-        .order('date', { ascending: false });
+        .eq('user_id', user.id);
+      
+      // If includeChildren is false, exclude child transactions
+      if (!includeChildren) {
+        query = query.or('is_parent.eq.true,and(parent_id.is.null,is_parent.eq.false)');
+      }
+      
+      // Execute query
+      const { data, error } = await query.order('date', { ascending: false });
       
       if (error) {
         console.error('Error fetching transactions:', error.message);
@@ -124,7 +182,7 @@ export class SupabaseTransactionController {
     }
   }
 
-  // Add new transaction with improved logging and error handling
+  // Add new transaction with support for parent-child relationships
   async addTransaction(transaction) {
     try {
       console.log('Adding new transaction:', transaction);
@@ -175,7 +233,10 @@ export class SupabaseTransactionController {
         user_id: user.id,
         date: transaction.date || new Date().toISOString(),
         created_at: new Date().toISOString(),
-        update_at : new Date().toISOString()
+        update_at: new Date().toISOString(),
+        // Parent-child fields (defaults if not provided)
+        is_parent: transaction.is_parent || false,
+        parent_id: transaction.parent_id || null,
       };
       
       console.log('Sending transaction to database:', newTransaction);
@@ -221,6 +282,57 @@ export class SupabaseTransactionController {
       throw new Error('Failed to add transaction after multiple attempts');
     } catch (error) {
       console.error('Error adding transaction:', error);
+      throw error;
+    }
+  }
+
+  // Add parent transaction with child products from receipt
+  async addReceiptTransaction(parentTransaction, products) {
+    try {
+      console.log('Adding receipt transaction with', products.length, 'products');
+      
+      // First create the parent transaction
+      const parentData = {
+        ...parentTransaction,
+        is_parent: true,
+        parent_id: null
+      };
+      
+      // Add the parent transaction
+      const savedParent = await this.addTransaction(parentData);
+      console.log('Parent transaction saved:', savedParent.id);
+      
+      // Now add child transactions for each product
+      const childTransactions = [];
+      
+      for (const product of products) {
+        try {
+          const childData = {
+            amount: product.price,
+            description: `${parentTransaction.description} - Item`,
+            category: product.categoryId || parentTransaction.category,
+            date: parentTransaction.date || new Date().toISOString(),
+            is_income: false,
+            is_parent: false,
+            parent_id: savedParent.id
+          };
+          
+          const savedChild = await this.addTransaction(childData);
+          childTransactions.push(savedChild);
+        } catch (productError) {
+          console.error('Error adding child transaction:', productError);
+          // Continue with other products even if one fails
+        }
+      }
+      
+      console.log(`Added ${childTransactions.length} child transactions`);
+      
+      return {
+        parent: savedParent,
+        children: childTransactions
+      };
+    } catch (error) {
+      console.error('Error in addReceiptTransaction:', error);
       throw error;
     }
   }
@@ -294,8 +406,8 @@ export class SupabaseTransactionController {
     }
   }
 
-  // Get transactions by date range with improved error handling
-  async getTransactionsByDateRange(startDate, endDate) {
+  // Get transactions by date range - Updated to handle child transaction filtering
+  async getTransactionsByDateRange(startDate, endDate, includeChildren = false) {
     try {
       console.log('Fetching transactions in date range:', startDate, 'to', endDate);
       
@@ -312,13 +424,21 @@ export class SupabaseTransactionController {
       
       console.log('Using ISO dates:', startISO, 'to', endISO);
       
-      const { data, error } = await supabase
+      // Build query with date range
+      let query = supabase
         .from(TABLES.TRANSACTIONS)
         .select('*')
         .eq('user_id', user.id)
         .gte('date', startISO)
-        .lte('date', endISO)
-        .order('date', { ascending: false });
+        .lte('date', endISO);
+      
+      // If includeChildren is false, exclude child transactions
+      if (!includeChildren) {
+        query = query.or('is_parent.eq.true,and(parent_id.is.null,is_parent.eq.false)');
+      }
+      
+      // Execute query
+      const { data, error } = await query.order('date', { ascending: false });
       
       if (error) {
         console.error('Error fetching transactions by date range:', error.message);
@@ -334,11 +454,7 @@ export class SupabaseTransactionController {
         console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
       }
       
-      // For recurring transactions, you'd need to implement the calculation
-      // This is a placeholder for that functionality
-      const recurringTransactions = []; // Could implement the calculation from your existing code
-      
-      return [...(data || []), ...recurringTransactions];
+      return data || [];
     } catch (error) {
       console.error('Error in getTransactionsByDateRange:', error);
       return [];

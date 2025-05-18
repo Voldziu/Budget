@@ -1,4 +1,4 @@
-// src/controllers/SupabaseBudgetController.js - Updated with new budget calculation
+// src/controllers/SupabaseBudgetController.js - Updated for parent-child transactions
 import { supabase, TABLES } from '../utils/supabase';
 import { SupabaseTransactionController } from './SupabaseTransactionController';
 import { SupabaseCategoryController } from './SupabaseCategoryController';
@@ -10,6 +10,7 @@ export class SupabaseBudgetController {
   }
   
   // Get spending summary with improved calculations and debugging
+  // Updated to handle parent-child transactions
   async getSpendingSummary(month, year) {
     try {      
       console.log(`Generating spending summary for ${month}/${year}`);
@@ -20,7 +21,13 @@ export class SupabaseBudgetController {
       
       console.log('Date range:', startDate.toISOString(), 'to', endDate.toISOString());
       
-      const transactions = await this.transactionController.getTransactionsByDateRange(startDate, endDate);
+      // Important: Get ALL transactions including children for calculations
+      const transactions = await this.transactionController.getTransactionsByDateRange(
+        startDate, 
+        endDate, 
+        true // includeChildren = true
+      );
+      
       const categories = await this.categoryController.getAllCategories();
       
       // Get the current budget amount
@@ -32,21 +39,29 @@ export class SupabaseBudgetController {
         console.log('Sample transaction:', transactions[0]);
       }
       
+      // Debug transaction types
+      const parentCount = transactions.filter(t => t.is_parent === true).length;
+      const childCount = transactions.filter(t => t.parent_id !== null).length;
+      const regularCount = transactions.filter(t => !t.is_parent && t.parent_id === null).length;
+      
+      console.log(`Transaction breakdown: Parents: ${parentCount}, Children: ${childCount}, Regular: ${regularCount}`);
+      
       // Debug income vs expense flags
       const incomeCount = transactions.filter(t => t.is_income === true).length;
       const expenseCount = transactions.filter(t => t.is_income === false).length;
       console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
       
       // Calculate total income and expenses - fixed to respect is_income flag
+      // For expenses, EXCLUDE parent transactions to avoid double-counting
       const totalIncome = transactions
-        .filter(t => t.is_income === true) // Explicitly check for true, not truthy values
+        .filter(t => t.is_income === true) // Only income transactions
         .reduce((sum, t) => {
           const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
           return sum + amount;
         }, 0);
         
       const totalExpenses = transactions
-        .filter(t => t.is_income === false) // Explicitly check for false, not falsy values
+        .filter(t => t.is_income === false && !t.is_parent) // Exclude parent transactions for expense calculation
         .reduce((sum, t) => {
           const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
           return sum + amount;
@@ -55,9 +70,10 @@ export class SupabaseBudgetController {
       console.log('Calculated income:', totalIncome, 'expenses:', totalExpenses, 'budget:', budgetAmount);
       
       // Calculate spending by category
+      // Use child transactions (not parents) for proper category allocation
       const spendingByCategory = categories.map(category => {
         const categoryTransactions = transactions.filter(
-          t => t.category === category.id && t.is_income === false
+          t => t.category === category.id && t.is_income === false && !t.is_parent
         );
         
         const spent = categoryTransactions.reduce((sum, t) => {
@@ -100,7 +116,7 @@ export class SupabaseBudgetController {
     }
   }
   
-  // Get current budget
+  // Get current budget - No changes needed
   async getCurrentBudget() {
     const date = new Date();
     const month = date.getMonth();
@@ -144,7 +160,7 @@ export class SupabaseBudgetController {
     }
   }
   
-  // Set budget
+  // Set budget - No changes needed
   async setBudget(budget) {
     try {
       const { data: { user } } = await supabase.auth.getUser();

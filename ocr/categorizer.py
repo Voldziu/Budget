@@ -24,6 +24,8 @@ def parse_receipt(receipt_text, categories,api_key=None):
     KategoriaProdukt2  
     CenaProdukt2
 
+    Absolutnie musisz podać odpowiedź w takiej formie. To bardzo bardzo ważne.
+
     Oto treść paragonu:
     {receipt}
     """
