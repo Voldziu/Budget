@@ -1,4 +1,4 @@
-// src/components/ReceiptAnalysisModal.js
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -20,6 +20,8 @@ const ReceiptAnalysisModal = ({
   onClose, 
   receiptData, 
   categories,
+  receiptImage,
+  storeName = "Store Receipt"
 }) => {
   const [editedProducts, setEditedProducts] = useState([]);
   const [selectedProductIndex, setSelectedProductIndex] = useState(null);
@@ -54,76 +56,87 @@ const ReceiptAnalysisModal = ({
     setIsLoading(true);
     
     try {
-      // Create an array to track saved transactions
-      const savedTransactions = [];
-      const errors = [];
+      // Process products to ensure they have the required fields
+      const productsToSave = [];
       
-      // Process each product as a transaction
+      // Validate products and get total
+      let total = 0;
+      let invalidProducts = [];
+      
       for (const product of editedProducts) {
-        try {
-          // Verify that product has a category
-          if (!product.category) {
-            errors.push(`${product.name}: Missing category`);
-            continue;
-          }
-          
-          // Find the category object to get the category ID
-          const categoryObj = categories.find(cat => cat.name === product.category);
-          
-          if (!categoryObj) {
-            errors.push(`${product.name}: Invalid category - ${product.category}`);
-            continue;
-          }
-          
-          // Create transaction object
-          const transaction = {
-            amount: product.price,
-            category: categoryObj.id,
-            description: product.name,
-            date: new Date().toISOString(),
-            is_income: false, // Receipts are typically expenses
-          };
-          
-          // Save transaction to database
-          const savedTransaction = await transactionController.addTransaction(transaction);
-          savedTransactions.push(savedTransaction);
-          
-        } catch (productError) {
-          console.error('Error saving product as transaction:', productError);
-          errors.push(`${product.name}: ${productError.message || 'Unknown error'}`);
+        // Verify that product has a category
+        if (!product.category) {
+          invalidProducts.push(`${product.name}: Missing category`);
+          continue;
         }
+        
+        // Find the category object to get the category ID
+        const categoryObj = categories.find(cat => cat.name === product.category);
+        
+        if (!categoryObj) {
+          invalidProducts.push(`${product.name}: Invalid category - ${product.category}`);
+          continue;
+        }
+        
+        // Add the product with the category ID
+        productsToSave.push({
+          name: product.name,
+          price: product.price,
+          categoryId: categoryObj.id
+        });
+        
+        total += parseFloat(product.price);
       }
       
-      // Show results to user
-      if (errors.length > 0) {
-        // Some transactions failed
-        if (savedTransactions.length > 0) {
-          Alert.alert(
-            'Partial Success',
-            `Saved ${savedTransactions.length} transactions successfully. ${errors.length} failed.`,
-            [{ text: 'OK', onPress: () => onClose() }]
-          );
-        } else {
-          // All transactions failed
-          Alert.alert(
-            'Error',
-            `Failed to save any transactions. Errors: ${errors.join(', ')}`,
-            [{ text: 'OK' }]
-          );
-        }
-      } else {
-        // All transactions succeeded
+      if (invalidProducts.length > 0) {
         Alert.alert(
-          'Success',
-          `Successfully saved ${savedTransactions.length} transactions.`,
-          [{ text: 'OK', onPress: () => onClose() }]
+          'Some products have issues',
+          `The following products have invalid or missing categories:\n${invalidProducts.join('\n')}`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Continue with valid products', 
+              onPress: async () => await saveValidProducts(productsToSave, total)
+            }
+          ]
         );
+      } else {
+        await saveValidProducts(productsToSave, total);
       }
     } catch (error) {
       console.error('Error saving transactions:', error);
       Alert.alert('Error', 'Failed to save transactions: ' + error.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  // Save valid products as parent-child transactions
+  const saveValidProducts = async (products, total) => {
+    try {
+      // Create parent transaction object
+      const parentTransaction = {
+        amount: total,
+        description: storeName || "Receipt",
+        // Use the category from the first product as default for the parent
+        category: products.length > 0 ? products[0].categoryId : categories[0].id, 
+        date: new Date().toISOString(),
+        is_income: false,
+      };
+      
+      // Use the addReceiptTransaction method to create parent and children
+      const result = await transactionController.addReceiptTransaction(parentTransaction, products);
+      
+      console.log('Transaction saved with parent and children:', result);
+      
+      Alert.alert(
+        'Success',
+        `Saved ${products.length} items as a receipt transaction.`,
+        [{ text: 'OK', onPress: () => onClose() }]
+      );
+    } catch (error) {
+      console.error('Error saving receipt transaction:', error);
+      Alert.alert('Error', 'Failed to save receipt transaction: ' + error.message);
     }
   };
   

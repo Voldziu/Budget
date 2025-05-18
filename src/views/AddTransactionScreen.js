@@ -118,9 +118,9 @@ const AddTransactionScreen = ({ route, navigation }) => {
       setSelectedCategory(editTransaction.category);
       
       // Set receipt image if applicable
-      if (editTransaction.receipt_image) {
-        setReceiptImage(editTransaction.receipt_image);
-      }
+      // if (editTransaction.receipt_image) {
+      //   setReceiptImage(editTransaction.receipt_image);
+      // }
       
       // Set recurring if applicable
       if (editTransaction.recurring) {
@@ -407,7 +407,7 @@ const AddTransactionScreen = ({ route, navigation }) => {
       if (receiptImage) {
         // Handle image upload to storage (would need to be implemented in your controller)
         // For now, just add the URI to demonstrate the structure
-        transactionData.receipt_image = receiptImage;
+        //transactionData.receipt_image = receiptImage;
       }
       
       console.log('Saving transaction with data:', transactionData);

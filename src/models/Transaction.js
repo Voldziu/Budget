@@ -8,7 +8,7 @@ class Transaction {
     recurring = false, 
     frequency = null, 
     customFrequency = null,
-    receiptImage = null,
+    //receiptImage = null,
     is_parent = false,
     parent_id = null
   ) {
@@ -21,7 +21,7 @@ class Transaction {
     this.recurring = recurring;
     this.frequency = frequency; // 'daily', 'weekly', 'monthly', 'custom'
     this.customFrequency = customFrequency; // { times: number, period: 'day'|'week'|'month' }
-    this.receiptImage = receiptImage;
+    //this.receiptImage = receiptImage;
     this.is_parent = is_parent;
     this.parent_id = parent_id;
   }

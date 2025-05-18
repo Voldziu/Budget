@@ -74,7 +74,7 @@ const TransactionGroupItem = ({
               
               <View style={styles.childDetails}>
                 <Text style={styles.childName} numberOfLines={1}>
-                  {child.product_name || child.description}
+                  {child.description}
                 </Text>
                 <View style={styles.childRow}>
                   <Text style={styles.childCategory}>
