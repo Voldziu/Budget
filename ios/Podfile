@@ -16,7 +16,7 @@ end
 
 target 'Receipts' do
   config = use_native_modules!
-
+  ENV['RCT_NO_LAUNCH_PACKAGER'] = '1'
   use_react_native!(
     :path => config[:reactNativePath],
     # An absolute path to your application root.

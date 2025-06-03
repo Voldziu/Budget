@@ -1,20 +1,28 @@
-// src/components/TransactionGroupItem.js - New component for parent transactions
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+// src/views/components/TransactionGroupItem.js - Beautiful unified component for receipt transactions
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { useCurrency } from '../../utils/CurrencyContext';
+import {useCurrency} from '../../utils/CurrencyContext';
+import {useTheme} from '../../utils/ThemeContext';
 
-const TransactionGroupItem = ({ 
-  transaction, 
-  onPress, 
-  onExpand, 
+const TransactionGroupItem = ({
+  transaction,
+  onPress,
+  onExpand,
   isExpanded,
-  childTransactions = []
+  childTransactions = [],
+  isLoading = false,
 }) => {
-  // Get currency formatter
-  const { formatAmount } = useCurrency();
+  const {formatAmount} = useCurrency();
+  const {theme} = useTheme();
 
-  // Format the date
+  // Format the date beautifully
   const formattedDate = new Date(transaction.date).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -23,70 +31,169 @@ const TransactionGroupItem = ({
   return (
     <View style={styles.container}>
       {/* Main transaction item */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.mainTransaction}
         onPress={onPress}
-        activeOpacity={0.7}
-      >
-        {/* Multi-category icon */}
-        <View style={styles.iconContainer}>
-          <Icon name="shopping-bag" size={18} color="#fff" />
+        activeOpacity={0.7}>
+        <View style={styles.leftSection}>
+          {/* Beautiful multi-category icon */}
+          <View
+            style={[
+              styles.iconContainer,
+              {
+                backgroundColor: '#FF9800' + '15',
+                borderColor: '#FF9800' + '30',
+              },
+            ]}>
+            <Icon name="shopping-bag" size={20} color="#FF9800" />
+          </View>
+
+          {/* Transaction Details */}
+          <View style={styles.detailsContainer}>
+            <Text
+              style={[styles.title, {color: theme.colors.text}]}
+              numberOfLines={1}>
+              {transaction.description || 'Receipt Purchase'}
+            </Text>
+            <View style={styles.metaRow}>
+              <Text
+                style={[styles.category, {color: theme.colors.textSecondary}]}>
+                {childTransactions.length > 0
+                  ? `${childTransactions.length} items`
+                  : 'Multi-category'}
+              </Text>
+              <View
+                style={[
+                  styles.dot,
+                  {backgroundColor: theme.colors.textTertiary},
+                ]}
+              />
+              <Text style={[styles.date, {color: theme.colors.textSecondary}]}>
+                {formattedDate}
+              </Text>
+            </View>
+          </View>
         </View>
-        
-        {/* Transaction details */}
-        <View style={styles.details}>
-          <Text style={styles.description} numberOfLines={1}>
-            {transaction.description}
+
+        {/* Amount and expand button */}
+        <View style={styles.rightSection}>
+          <Text
+            style={[
+              styles.amount,
+              {
+                color: transaction.is_income
+                  ? theme.colors.success
+                  : theme.colors.error,
+              },
+            ]}>
+            {transaction.is_income ? '+' : '-'}
+            {formatAmount(Math.abs(transaction.amount))}
           </Text>
-          <Text style={styles.metadata}>
-            Multi-category • {formattedDate}
-          </Text>
+
+          <TouchableOpacity
+            style={[
+              styles.expandButton,
+              {backgroundColor: theme.colors.backgroundTertiary},
+            ]}
+            onPress={onExpand}
+            activeOpacity={0.7}>
+            {isLoading ? (
+              <ActivityIndicator
+                size="small"
+                color={theme.colors.textSecondary}
+              />
+            ) : (
+              <Icon
+                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                size={14}
+                color={theme.colors.textSecondary}
+              />
+            )}
+          </TouchableOpacity>
         </View>
-        
-        {/* Amount */}
-        <View style={styles.amountContainer}>
-          <Text style={[styles.amount, styles.expenseText]}>
-            -{formatAmount(transaction.amount)}
-          </Text>
-        </View>
-        
-        {/* Expand/collapse button */}
-        <TouchableOpacity 
-          style={styles.expandButton}
-          onPress={onExpand}
-        >
-          <Icon 
-            name={isExpanded ? "chevron-up" : "chevron-down"} 
-            size={20} 
-            color="#666" 
-          />
-        </TouchableOpacity>
       </TouchableOpacity>
-      
+
       {/* Child transactions container */}
       {isExpanded && childTransactions.length > 0 && (
-        <View style={styles.childrenContainer}>
-          {childTransactions.map((child) => (
-            <View key={child.id} style={styles.childItem}>
-              <View style={styles.childIconContainer}>
-                <Icon name="circle" size={8} color="#666" />
-              </View>
-              
-              <View style={styles.childDetails}>
-                <Text style={styles.childName} numberOfLines={1}>
-                  {child.description}
-                </Text>
-                <View style={styles.childRow}>
-                  <Text style={styles.childCategory}>
+        <View
+          style={[
+            styles.childrenContainer,
+            {backgroundColor: theme.colors.backgroundSecondary},
+          ]}>
+          {childTransactions.map((child, index) => {
+            const isLast = index === childTransactions.length - 1;
+
+            // Get category color for each child item
+            const getCategoryColor = categoryName => {
+              const colorMap = {
+                Groceries: '#4CAF50',
+                Food: '#FF9800',
+                Shopping: '#2196F3',
+                Entertainment: '#9C27B0',
+                Transport: '#607D8B',
+                Health: '#F44336',
+                Bills: '#795548',
+                Education: '#3F51B5',
+                Housing: '#009688',
+                Default: '#666666',
+              };
+              return colorMap[categoryName] || colorMap['Default'];
+            };
+
+            const categoryColor = getCategoryColor(child.categoryName);
+
+            return (
+              <View
+                key={child.id}
+                style={[
+                  styles.childItem,
+                  !isLast && [
+                    styles.childBorder,
+                    {borderBottomColor: theme.colors.border},
+                  ],
+                ]}>
+                <View style={styles.childIconContainer}>
+                  <View
+                    style={[styles.childDot, {backgroundColor: categoryColor}]}
+                  />
+                </View>
+
+                <View style={styles.childDetails}>
+                  <View style={styles.childHeader}>
+                    <Text
+                      style={[styles.childName, {color: theme.colors.text}]}
+                      numberOfLines={1}>
+                      {child.description || 'Item'}
+                    </Text>
+                    <Text
+                      style={[styles.childAmount, {color: theme.colors.text}]}>
+                      {formatAmount(child.amount)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.childCategory, {color: categoryColor}]}>
                     {child.categoryName || 'Uncategorized'}
-                  </Text>
-                  <Text style={styles.childAmount}>
-                    {formatAmount(child.amount)}
                   </Text>
                 </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
+
+          {/* Summary footer */}
+          <View
+            style={[
+              styles.summaryFooter,
+              {borderTopColor: theme.colors.border},
+            ]}>
+            <Text
+              style={[styles.summaryText, {color: theme.colors.textSecondary}]}>
+              Total: {childTransactions.length} items
+            </Text>
+            <Text style={[styles.summaryAmount, {color: theme.colors.text}]}>
+              {formatAmount(
+                childTransactions.reduce((sum, child) => sum + child.amount, 0),
+              )}
+            </Text>
+          </View>
         </View>
       )}
     </View>
@@ -95,93 +202,139 @@ const TransactionGroupItem = ({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    overflow: 'hidden',
   },
   mainTransaction: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 12, // Zmniejszone z 16 na 12
+  },
+  leftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42, // Zmniejszone z 48 na 42
+    height: 42, // Zmniejszone z 48 na 42
+    borderRadius: 21, // Zmniejszone z 24 na 21
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-    backgroundColor: '#5C6BC0', // Purple-ish color for multi-category
+    marginRight: 14, // Zmniejszone z 16 na 14
+    borderWidth: 1,
   },
-  details: {
+  detailsContainer: {
     flex: 1,
     justifyContent: 'center',
   },
-  description: {
+  title: {
     fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 2,
+    fontWeight: '600',
+    marginBottom: 6,
+    letterSpacing: 0.2,
   },
-  metadata: {
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  category: {
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
   },
-  amountContainer: {
-    paddingLeft: 8,
+  dot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    marginHorizontal: 8,
+  },
+  date: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  rightSection: {
+    alignItems: 'flex-end',
   },
   amount: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  expenseText: {
-    color: '#F44336',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 8,
   },
   expandButton: {
-    padding: 8,
-    marginLeft: 4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  
+
   // Child transactions styles
   childrenContainer: {
-    backgroundColor: '#f9f9f9',
-    paddingLeft: 48, // To align with the main transaction content
-    paddingRight: 16,
-    paddingVertical: 8,
+    paddingLeft: 64, // Align with main transaction content
+    paddingRight: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   childItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 12,
+  },
+  childBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
   },
   childIconContainer: {
-    width: 16,
-    height: 16,
+    width: 20,
+    height: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 12,
+  },
+  childDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   childDetails: {
     flex: 1,
   },
-  childName: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  childRow: {
+  childHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  childName: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 8,
+  },
+  childAmount: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   childCategory: {
     fontSize: 12,
-    color: '#666',
+    fontWeight: '600',
   },
-  childAmount: {
+  summaryFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    marginTop: 8,
+    borderTopWidth: 1,
+  },
+  summaryText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  summaryAmount: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
