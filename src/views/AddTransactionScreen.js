@@ -1,5 +1,5 @@
-// src/views/AddTransactionScreen.js - Complete implementation with parent-child transaction support
-import React, { useState, useEffect } from 'react';
+// src/views/AddTransactionScreen.js - Elegant, clean design
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -13,38 +13,74 @@ import {
   ActivityIndicator,
   Modal,
   Alert,
-  Image
+  Image,
+  SafeAreaView,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
-import { SupabaseCategoryController } from '../controllers/SupabaseCategoryController';
-import { SupabaseTransactionController } from '../controllers/SupabaseTransactionController';
-import { useCurrency } from '../utils/CurrencyContext';
-import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
+import {SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
+import {SupabaseTransactionController} from '../controllers/SupabaseTransactionController';
+import {useCurrency} from '../utils/CurrencyContext';
+import {useTheme} from '../utils/ThemeContext';
+import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import ReceiptAnalysisModal from './components/ReceiptAnalysisModal';
 
+const {width} = Dimensions.get('window');
+const CATEGORY_WIDTH = (width - 65) / 4; // 4 kategorii na rząd
+
 // Constant for API URL
-const URL = "https://receipts-production.up.railway.app";
+const URL = 'https://receipts-production.up.railway.app';
 
 // Array of available icons for categories
 const AVAILABLE_ICONS = [
-  'shopping-cart', 'home', 'film', 'truck', 'dollar-sign', 
-  'coffee', 'credit-card', 'gift', 'briefcase', 'car',
-  'plane', 'book', 'heart', 'smartphone', 'monitor',
-  'utensils', 'scissors', 'shopping-bag', 'wifi', 'user'
+  'shopping-cart',
+  'home',
+  'film',
+  'truck',
+  'dollar-sign',
+  'coffee',
+  'credit-card',
+  'gift',
+  'briefcase',
+  'car',
+  'plane',
+  'book',
+  'heart',
+  'smartphone',
+  'monitor',
+  'utensils',
+  'scissors',
+  'shopping-bag',
+  'wifi',
+  'user',
 ];
 
 // Array of available colors for categories
 const AVAILABLE_COLORS = [
-  '#4CAF50', '#2196F3', '#FF9800', '#795548', '#E91E63',
-  '#9C27B0', '#673AB7', '#3F51B5', '#009688', '#FF5722',
-  '#607D8B', '#F44336', '#FFEB3B', '#8BC34A', '#03A9F4'
+  '#4CAF50',
+  '#2196F3',
+  '#FF9800',
+  '#795548',
+  '#E91E63',
+  '#9C27B0',
+  '#673AB7',
+  '#3F51B5',
+  '#009688',
+  '#FF5722',
+  '#607D8B',
+  '#F44336',
+  '#FFEB3B',
+  '#8BC34A',
+  '#03A9F4',
 ];
 
-const AddTransactionScreen = ({ route, navigation }) => {
+const AddTransactionScreen = ({route, navigation}) => {
   // Get transaction if in edit mode
   const editTransaction = route.params?.transaction;
-  const { currency } = useCurrency();
-  
+  const {currency, formatAmount} = useCurrency();
+  const {theme, isDark} = useTheme();
+
   // State variables
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -56,10 +92,10 @@ const AddTransactionScreen = ({ route, navigation }) => {
   const [frequency, setFrequency] = useState('monthly');
   const [customFrequency, setCustomFrequency] = useState({
     times: 1,
-    period: 'week'
+    period: 'week',
   });
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // Category modal state
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -67,86 +103,67 @@ const AddTransactionScreen = ({ route, navigation }) => {
   const [newCategoryColor, setNewCategoryColor] = useState('#4CAF50');
   const [newCategoryBudget, setNewCategoryBudget] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
-  
+
   // Receipt image state
   const [receiptImage, setReceiptImage] = useState(null);
-  const [showReceiptOptions, setShowReceiptOptions] = useState(false);
   const [isAnalyzingReceipt, setIsAnalyzingReceipt] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [analysisResults, setAnalysisResults] = useState([]);
   const [storeName, setStoreName] = useState('');
-  
+
   // Controllers
   const categoryController = new SupabaseCategoryController();
   const transactionController = new SupabaseTransactionController();
-  
+
   // Load data on component mount
   useEffect(() => {
     loadData();
   }, []);
-  
+
   // Populate form if editing
   useEffect(() => {
     if (editTransaction) {
-      // Handle editing an existing transaction (but not for parent transactions)
-      console.log('Editing transaction:', editTransaction);
-      
-      // Skip loading if it's a parent transaction - those should only be viewable
       if (editTransaction.is_parent) {
         Alert.alert(
           'Cannot Edit',
-          'Receipt transactions cannot be edited directly. Please view or edit individual items.',
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          'Receipt transactions cannot be edited directly.',
+          [{text: 'OK', onPress: () => navigation.goBack()}],
         );
         return;
       }
-      
-      // Set amount with proper handling
-      const amountValue = typeof editTransaction.amount === 'string' 
-        ? editTransaction.amount 
-        : editTransaction.amount.toString();
+
+      const amountValue =
+        typeof editTransaction.amount === 'string'
+          ? editTransaction.amount
+          : editTransaction.amount.toString();
       setAmount(amountValue);
-      
-      // Set other fields
       setDescription(editTransaction.description);
-      
-      // Ensure is_income is properly set as a boolean
-      const transactionIsIncome = editTransaction.is_income === true;
-      console.log('Setting is_income to:', transactionIsIncome);
-      setIs_Income(transactionIsIncome);
-      
+      setIs_Income(editTransaction.is_income === true);
       setSelectedCategory(editTransaction.category);
-      
-      // Set receipt image if applicable
-      // if (editTransaction.receipt_image) {
-      //   setReceiptImage(editTransaction.receipt_image);
-      // }
-      
-      // Set recurring if applicable
+
       if (editTransaction.recurring) {
         setRecurring(true);
         setFrequency(editTransaction.frequency);
-        if (editTransaction.frequency === 'custom' && editTransaction.customFrequency) {
+        if (
+          editTransaction.frequency === 'custom' &&
+          editTransaction.customFrequency
+        ) {
           setCustomFrequency(editTransaction.customFrequency);
         }
       }
     }
   }, [editTransaction, navigation]);
-  
+
   const loadData = async () => {
     setLoading(true);
     try {
       const allCategories = await categoryController.getAllCategories();
-      console.log('Loaded categories:', allCategories.length);
       setCategories(allCategories);
-      
-      // Set default category
+
       if (!selectedCategory && allCategories.length > 0) {
-        // Default to first non-income category for expenses, or income category for income
-        const defaultCategory = is_income 
-          ? allCategories.find(c => c.name === 'Income')?.id 
+        const defaultCategory = is_income
+          ? allCategories.find(c => c.name === 'Income')?.id
           : allCategories.find(c => c.name !== 'Income')?.id;
-        
         setSelectedCategory(defaultCategory);
       }
     } catch (error) {
@@ -155,265 +172,187 @@ const AddTransactionScreen = ({ route, navigation }) => {
       setLoading(false);
     }
   };
-  
-  // Create a new category
+
   const handleAddCategory = async () => {
+    console.log('🔥 Add category clicked!'); // dodaj to
+
     if (!newCategoryName.trim()) {
       Alert.alert('Error', 'Please enter a category name');
       return;
     }
-    
-    // Validate budget
+
     let parsedBudget = 0;
     if (newCategoryBudget.trim()) {
-      // Replace comma with dot for numerical parsing
       const formattedBudget = newCategoryBudget.replace(',', '.');
       parsedBudget = parseFloat(formattedBudget);
-      
+
       if (isNaN(parsedBudget) || parsedBudget < 0) {
         Alert.alert('Error', 'Please enter a valid budget amount');
         return;
       }
     }
-    
+
     setAddingCategory(true);
-    
+
     try {
       const newCategory = {
         name: newCategoryName.trim(),
         icon: newCategoryIcon,
         color: newCategoryColor,
-        budget: parsedBudget
+        budget: parsedBudget,
       };
-      
-      console.log('Creating new category:', newCategory);
-      
+
       const createdCategory = await categoryController.addCategory(newCategory);
-      console.log('Category created:', createdCategory);
-      
-      // Refresh categories list
       const updatedCategories = await categoryController.getAllCategories();
       setCategories(updatedCategories);
-      
-      // Select the newly created category
       setSelectedCategory(createdCategory.id);
-      
-      // Close the modal and reset form
+
       setShowCategoryModal(false);
       setNewCategoryName('');
       setNewCategoryIcon('shopping-cart');
       setNewCategoryColor('#4CAF50');
       setNewCategoryBudget('');
-      
     } catch (error) {
       console.error('Error adding category:', error);
-      Alert.alert('Error', 'Failed to create category. Please try again.');
+      Alert.alert('Error', 'Failed to create category.');
     } finally {
       setAddingCategory(false);
     }
   };
-  
-  // Handle taking a photo with the camera
+
   const handleTakePhoto = () => {
-    const options = {
-      mediaType: 'photo',
-      quality: 0.8,
-    };
-    
-    launchCamera(options, response => {
-      if (response.didCancel) {
-        console.log('User cancelled camera');
-      } else if (response.errorCode) {
-        console.log('Camera Error: ', response.errorMessage);
-        Alert.alert('Error', 'Failed to take photo. Please try again.');
-      } else if (response.assets && response.assets.length > 0) {
+    console.log('🔥 handleTakePhoto called!'); // dodaj to
+    launchCamera({mediaType: 'photo', quality: 0.8}, response => {
+      if (
+        !response.didCancel &&
+        !response.errorCode &&
+        response.assets?.length > 0
+      ) {
         setReceiptImage(response.assets[0]);
-        setShowReceiptOptions(false);
       }
     });
   };
-  
-  // Handle choosing an image from the library
+
   const handleChooseFromLibrary = () => {
-    const options = {
-      mediaType: 'photo',
-      quality: 0.8,
-    };
-    
-    launchImageLibrary(options, response => {
-      if (response.didCancel) {
-        console.log('User cancelled image picker');
-      } else if (response.errorCode) {
-        console.log('ImagePicker Error: ', response.errorMessage);
-        Alert.alert('Error', 'Failed to pick image. Please try again.');
-      } else if (response.assets && response.assets.length > 0) {
+    launchImageLibrary({mediaType: 'photo', quality: 0.8}, response => {
+      if (
+        !response.didCancel &&
+        !response.errorCode &&
+        response.assets?.length > 0
+      ) {
         setReceiptImage(response.assets[0]);
-        setShowReceiptOptions(false);
       }
     });
   };
-  
-  // Clear the receipt image
-  const handleClearImage = () => {
-    setReceiptImage(null);
-  };
-  
-  // Helper function to extract category names
-  const parse_categories_to_names = (categories) => {
-    return categories.map(category => category.name);
-  };
-  
-  // Analyze receipt to extract products and create parent-child transactions
+
   const handleAnalyzeReceipt = async () => {
-    if (!receiptImage) {
-      Alert.alert('Error', 'No receipt image to analyze');
-      return;
-    }
-    
+    if (!receiptImage) return;
+
     setIsAnalyzingReceipt(true);
-    
+
     try {
-      // Create a form data object to send to the backend
       const formData = new FormData();
-      
-      // Append the image
       formData.append('receipt', {
         uri: receiptImage.uri,
         type: receiptImage.type || 'image/jpeg',
-        name: receiptImage.fileName || 'receipt.jpg'
+        name: receiptImage.fileName || 'receipt.jpg',
       });
-      
-      // Prepare category names to send
-      const categoriesToSend = parse_categories_to_names(categories);
-      
-      // Append the user's categories as JSON
+
+      const categoriesToSend = categories.map(category => category.name);
       formData.append('categories', JSON.stringify(categoriesToSend));
-      
-      console.log('Sending receipt for analysis with categories:', JSON.stringify(categoriesToSend));
-      
-      // Make API call to your backend
+
       const response = await fetch(`${URL}/api/receipt`, {
         method: 'POST',
         body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: {'Content-Type': 'multipart/form-data'},
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to analyze receipt');
-      }
-      
+
+      if (!response.ok) throw new Error('Failed to analyze receipt');
+
       const data = await response.json();
-      console.log('Receipt analysis result:', data);
-      
-      // Try to extract store name from description
+
       if (data.description) {
         setStoreName(data.description.replace('Paragon sklepowy', '').trim());
       }
-      
-      // Set the analysis results for the modal
+
       if (data.categorized_products) {
-        // Format the products data for the modal
         const products = [];
-        
-        // Loop through categories and their products
-        Object.entries(data.categorized_products).forEach(([categoryName, categoryProducts]) => {
-          // Add each product with its category
-          categoryProducts.forEach(product => {
-            products.push({
-              name: product.name,
-              category: categoryName,
-              price: product.price
+        Object.entries(data.categorized_products).forEach(
+          ([categoryName, categoryProducts]) => {
+            categoryProducts.forEach(product => {
+              products.push({
+                name: product.name,
+                category: categoryName,
+                price: product.price,
+              });
             });
-          });
-        });
-        
+          },
+        );
         setAnalysisResults(products);
         setShowAnalysisModal(true);
+      } else if (data.products && Array.isArray(data.products)) {
+        setAnalysisResults(data.products);
+        setShowAnalysisModal(true);
       } else {
-        // Fallback for simple product list if no categories
-        if (data.products && Array.isArray(data.products)) {
-          setAnalysisResults(data.products);
-          setShowAnalysisModal(true);
-        } else {
-          // If no product data found, show information message
-          Alert.alert('No products found', 'The receipt analysis did not detect any products. Please enter details manually.');
-        }
+        Alert.alert(
+          'No products found',
+          'Could not detect products on receipt.',
+        );
       }
-      
     } catch (error) {
-      console.error('Error analyzing receipt:', error);
-      Alert.alert('Error', 'Failed to analyze receipt. Please try again or enter details manually.');
+      Alert.alert('Error', 'Failed to analyze receipt.');
     } finally {
       setIsAnalyzingReceipt(false);
     }
   };
-  
+
   const handleSave = async () => {
-    // Skip parent transactions
     if (editTransaction && editTransaction.is_parent) {
       navigation.goBack();
       return;
     }
-    
-    // Validate input
-    // Create a local variable for the modified amount to accept both 21,37 and 21.37 formats
+
     let formattedAmount = amount.replace(',', '.');
-    
-    if (!formattedAmount || isNaN(parseFloat(formattedAmount)) || parseFloat(formattedAmount) <= 0) {
+
+    if (
+      !formattedAmount ||
+      isNaN(parseFloat(formattedAmount)) ||
+      parseFloat(formattedAmount) <= 0
+    ) {
       Alert.alert('Error', 'Please enter a valid amount');
       return;
     }
-    
+
     if (!description.trim()) {
       Alert.alert('Error', 'Please enter a description');
       return;
     }
-    
-    // Only validate category for expenses, not for income
+
     if (!is_income && !selectedCategory) {
       Alert.alert('Error', 'Please select a category');
       return;
     }
-    
+
     setIsSaving(true);
-    
+
     try {
-      // Parse amount as a number with 2 decimal places
       const parsedAmount = Math.round(parseFloat(formattedAmount) * 100) / 100;
-      
-      // For income, always use the Income category
-      const categoryId = is_income 
-        ? categories.find(c => c.name === 'Income')?.id 
+      const categoryId = is_income
+        ? categories.find(c => c.name === 'Income')?.id
         : selectedCategory;
-      
-      if (!categoryId) {
-        throw new Error('Could not find appropriate category');
-      }
-      
+
+      if (!categoryId) throw new Error('Could not find appropriate category');
+
       const transactionData = {
         amount: parsedAmount,
         description,
         category: categoryId,
-        is_income: is_income, // Ensure this is properly set as boolean
+        is_income: is_income,
         date: new Date().toISOString(),
-        // Parent-child fields
         is_parent: false,
         parent_id: null,
       };
-      
-      // Add receipt image if available
-      if (receiptImage) {
-        // Handle image upload to storage (would need to be implemented in your controller)
-        // For now, just add the URI to demonstrate the structure
-        //transactionData.receipt_image = receiptImage;
-      }
-      
-      console.log('Saving transaction with data:', transactionData);
-      console.log('is_income type:', typeof is_income, 'value:', is_income);
-      
-      // Add recurring information if enabled
+
       if (recurring) {
         transactionData.recurring = true;
         transactionData.frequency = frequency;
@@ -421,582 +360,685 @@ const AddTransactionScreen = ({ route, navigation }) => {
           transactionData.customFrequency = customFrequency;
         }
       }
-      
+
       if (editTransaction) {
-        // Update existing transaction
-        console.log('Updating transaction:', editTransaction.id);
         await transactionController.updateTransaction(
           editTransaction.id,
-          transactionData
+          transactionData,
         );
       } else {
-        // Add new transaction
-        console.log('Adding new transaction');
         await transactionController.addTransaction(transactionData);
       }
-      
+
       navigation.goBack();
     } catch (error) {
-      console.error('Error saving transaction:', error);
-      Alert.alert('Error', 'Failed to save transaction. Please try again.');
+      Alert.alert('Error', 'Failed to save transaction.');
     } finally {
       setIsSaving(false);
     }
   };
-  
-  const handleDeleteCategory = async (categoryId) => {
+
+  const handleDeleteCategory = async categoryId => {
     try {
-      // Don't allow deletion of default categories
       const categoryToDelete = categories.find(c => c.id === categoryId);
-      if (categoryToDelete && ['Income', 'Groceries', 'Housing', 'Entertainment', 'Transportation'].includes(categoryToDelete.name)) {
-        Alert.alert("Cannot Delete", "Default categories cannot be deleted.");
+      if (
+        categoryToDelete &&
+        [
+          'Income',
+          'Groceries',
+          'Housing',
+          'Entertainment',
+          'Transportation',
+        ].includes(categoryToDelete.name)
+      ) {
+        Alert.alert('Cannot Delete', 'Default categories cannot be deleted.');
         return;
       }
-      
-      console.log('Deleting category:', categoryId);
-      setLoading(true);
-      
-      // Check if category is being used in any transactions
-      const transactions = await transactionController.getAllTransactions(true);
-      const isUsed = transactions.some(t => t.category === categoryId);
-      
-      if (isUsed) {
-        Alert.alert(
-          "Category In Use",
-          "This category is used in one or more transactions. Deleting it will affect those transactions. Continue?",
-          [
-            { text: "Cancel", style: "cancel" },
-            { 
-              text: "Delete Anyway", 
-              onPress: async () => {
-                await confirmDeleteCategory(categoryId);
-              },
-              style: "destructive" 
-            }
-          ]
-        );
-      } else {
-        await confirmDeleteCategory(categoryId);
-      }
-    } catch (error) {
-      console.error('Error during category deletion check:', error);
-      Alert.alert("Error", "Failed to check if category can be deleted.");
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  const confirmDeleteCategory = async (categoryId) => {
-    try {
-      setLoading(true);
-      
-      // Delete the category
+
       await categoryController.deleteCategory(categoryId);
-      
-      // Refresh the category list
       const updatedCategories = await categoryController.getAllCategories();
       setCategories(updatedCategories);
-      
-      // If the deleted category was selected, select a different one
+
       if (selectedCategory === categoryId) {
-        const defaultCategory = updatedCategories.find(c => c.name !== 'Income')?.id;
+        const defaultCategory = updatedCategories.find(
+          c => c.name !== 'Income',
+        )?.id;
         setSelectedCategory(defaultCategory);
       }
-      
-      Alert.alert("Success", "Category deleted successfully.");
     } catch (error) {
-      console.error('Error deleting category:', error);
-      Alert.alert("Error", "Failed to delete category.");
-    } finally {
-      setLoading(false);
+      Alert.alert('Error', 'Failed to delete category.');
     }
   };
-  
+
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View
+        style={[styles.container, {backgroundColor: theme.colors.background}]}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
       </View>
     );
   }
-  
+
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={100}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Transaction Type Toggle */}
-        <View style={styles.typeToggleContainer}>
-          <TouchableOpacity
-            style={[styles.typeButton, !is_income && styles.activeTypeButton]}
-            onPress={() => setIs_Income(false)}
-          >
-            <Text 
-              style={[
-                styles.typeButtonText, 
-                !is_income && styles.activeTypeButtonText
-              ]}
-            >
-              Expense
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.typeButton, is_income && styles.activeTypeButton, is_income && styles.incomeButton]}
-            onPress={() => setIs_Income(true)}
-          >
-            <Text 
-              style={[
-                styles.typeButtonText, 
-                is_income && styles.activeTypeButtonText
-              ]}
-            >
-              Income
-            </Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Amount Input - Updated with currency symbol */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Amount</Text>
-          <View style={styles.amountInputContainer}>
-            <Text style={styles.currencySymbol}>{currency.symbol}</Text>
-            <TextInput
-              style={styles.amountInput}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              value={amount}
-              onChangeText={setAmount}
-            />
-          </View>
-        </View>
-        
-        {/* Description Input */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Description</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="What was this for?"
-            value={description}
-            onChangeText={setDescription}
-          />
-        </View>
-        
-        {/* Category Selection with Add Category Button - Only shown for Expenses */}
-        {!is_income && (
-          <View style={styles.inputGroup}>
-            <View style={styles.categoryHeaderContainer}>
-              <Text style={styles.label}>Category</Text>
-              <TouchableOpacity 
-                style={styles.addCategoryButton}
-                onPress={() => setShowCategoryModal(true)}
-              >
-                <Icon name="plus" size={16} color="#007AFF" />
-                <Text style={styles.addCategoryButtonText}>Add New</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.categoryScroll}
-            >
-              {categories
-                .filter(category => category.name !== 'Income')
-                .map(category => (
-                  <TouchableOpacity
-                    key={category.id}
-                    style={[
-                      styles.categoryItem,
-                      selectedCategory === category.id && styles.selectedCategoryItem,
-                      { borderColor: category.color }
-                    ]}
-                    onPress={() => setSelectedCategory(category.id)}
-                  >
-                    <View 
-                      style={[
-                        styles.categoryIcon,
-                        { backgroundColor: category.color }
-                      ]}
-                    >
-                      <Icon name={category.icon} size={18} color="#fff" />
-                    </View>
-                    <Text style={styles.categoryName}>{category.name}</Text>
-                    {/* Delete button for custom categories */}
-                    <TouchableOpacity
-                      style={styles.deleteCategoryButton}
-                      onPress={(e) => {
-                        e.stopPropagation(); // Prevent selecting the category when deleting
-                        Alert.alert(
-                          "Delete Category",
-                          `Are you sure you want to delete "${category.name}"?`,
-                          [
-                            {
-                              text: "Cancel",
-                              style: "cancel"
-                            },
-                            { 
-                              text: "Delete", 
-                              onPress: () => handleDeleteCategory(category.id),
-                              style: "destructive"
-                            }
-                          ]
-                        );
-                      }}
-                    >
-                      <Icon name="trash-2" size={14} color="#FF3B30" />
-                    </TouchableOpacity>
-                  </TouchableOpacity>
-                ))
-              }
-            </ScrollView>
-          </View>
-        )}
-        
-        {/* Receipt Image Section */}
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Receipt Image</Text>
-          {!receiptImage ? (
-            // Show buttons if no image is selected
-            <View style={styles.receiptButtonsContainer}>
-              <TouchableOpacity 
-                style={styles.receiptButton} 
-                onPress={() => handleTakePhoto()}
-              >
-                <Icon name="camera" size={20} color="#007AFF" />
-                <Text style={styles.receiptButtonText}>Take Photo</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.receiptButton} 
-                onPress={() => handleChooseFromLibrary()}
-              >
-                <Icon name="image" size={20} color="#007AFF" />
-                <Text style={styles.receiptButtonText}>Choose from Gallery</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            // Show thumbnail and buttons if image is selected
-            <View>
-              <View style={styles.receiptImageContainer}>
-                <Image 
-                  source={{ uri: receiptImage.uri }} 
-                  style={styles.receiptThumbnail} 
-                  resizeMode="cover" 
-                />
-                
-                <View style={styles.receiptImageButtonsContainer}>
-                  <TouchableOpacity 
-                    style={styles.clearImageButton}
-                    onPress={handleClearImage}
-                  >
-                    <Icon name="trash-2" size={20} color="#FF3B30" />
-                    <Text style={styles.clearImageText}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              
-              {/* New Analyze Receipt Button */}
-              <TouchableOpacity 
-                style={styles.analyzeReceiptButton} 
-                onPress={handleAnalyzeReceipt}
-                disabled={isAnalyzingReceipt}
-              >
-                {isAnalyzingReceipt ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <>
-                    <Icon name="search" size={20} color="#fff" />
-                    <Text style={styles.analyzeReceiptButtonText}>
-                      Analyze Receipt
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-        
-        {/* Recurring Transaction Toggle */}
-        <View style={styles.switchContainer}>
-          <Text style={styles.switchLabel}>Recurring Transaction</Text>
-          <Switch
-            value={recurring}
-            onValueChange={setRecurring}
-            trackColor={{ false: '#ddd', true: '#007AFF' }}
-            thumbColor="#fff"
-          />
-        </View>
-        
-        {/* Recurring Transaction Options */}
-        {recurring && (
-          <View style={styles.recurringOptions}>
-            <Text style={styles.label}>Frequency</Text>
-            <View style={styles.frequencyButtonsContainer}>
-              <TouchableOpacity
+    <View
+      style={[styles.container, {backgroundColor: theme.colors.background}]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}>
+            {/* Transaction Type Toggle */}
+            <View style={styles.section}>
+              <View
                 style={[
-                  styles.frequencyButton,
-                  frequency === 'daily' && styles.activeFrequencyButton
-                ]}
-                onPress={() => setFrequency('daily')}
-              >
-                <Text 
+                  styles.typeToggle,
+                  {backgroundColor: theme.colors.card, ...theme.shadows.medium},
+                ]}>
+                <TouchableOpacity
                   style={[
-                    styles.frequencyButtonText,
-                    frequency === 'daily' && styles.activeFrequencyButtonText
+                    styles.typeOption,
+                    !is_income && [
+                      styles.typeOptionActive,
+                      {backgroundColor: theme.colors.error},
+                    ],
                   ]}
-                >
-                  Daily
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.frequencyButton,
-                  frequency === 'weekly' && styles.activeFrequencyButton
-                ]}
-                onPress={() => setFrequency('weekly')}
-              >
-                <Text 
-                  style={[
-                    styles.frequencyButtonText,
-                    frequency === 'weekly' && styles.activeFrequencyButtonText
-                  ]}
-                >
-                  Weekly
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.frequencyButton,
-                  frequency === 'monthly' && styles.activeFrequencyButton
-                ]}
-                onPress={() => setFrequency('monthly')}
-              >
-                <Text 
-                  style={[
-                    styles.frequencyButtonText,
-                    frequency === 'monthly' && styles.activeFrequencyButtonText
-                  ]}
-                >
-                  Monthly
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.frequencyButton,
-                  frequency === 'custom' && styles.activeFrequencyButton
-                ]}
-                onPress={() => setFrequency('custom')}
-              >
-                <Text 
-                  style={[
-                    styles.frequencyButtonText,
-                    frequency === 'custom' && styles.activeFrequencyButtonText
-                  ]}
-                >
-                  Custom
-                </Text>
-              </TouchableOpacity>
-            </View>
-            
-            {/* Custom Frequency Options */}
-            {frequency === 'custom' && (
-              <View style={styles.customFrequencyContainer}>
-                <View style={styles.customFrequencyInputContainer}>
-                  <TextInput
-                    style={styles.customFrequencyInput}
-                    keyboardType="number-pad"
-                    value={customFrequency.times.toString()}
-                    onChangeText={(text) => 
-                      setCustomFrequency({
-                        ...customFrequency,
-                        times: parseInt(text) || 1
-                      })
-                    }
+                  onPress={() => setIs_Income(false)}>
+                  <Icon
+                    name="minus"
+                    size={16}
+                    color={!is_income ? '#FFFFFF' : theme.colors.textSecondary}
                   />
-                  
-                  <View style={styles.customFrequencyPeriodContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.periodButton,
-                        customFrequency.period === 'day' && styles.activePeriodButton
-                      ]}
-                      onPress={() => 
-                        setCustomFrequency({
-                          ...customFrequency,
-                          period: 'day'
-                        })
-                      }
-                    >
-                      <Text style={styles.periodButtonText}>Day</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[
-                        styles.periodButton,
-                        customFrequency.period === 'week' && styles.activePeriodButton
-                      ]}
-                      onPress={() => 
-                        setCustomFrequency({
-                          ...customFrequency,
-                          period: 'week'
-                        })
-                      }
-                    >
-                      <Text style={styles.periodButtonText}>Week</Text>
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[
-                        styles.periodButton,
-                        customFrequency.period === 'month' && styles.activePeriodButton
-                      ]}
-                      onPress={() => 
-                        setCustomFrequency({
-                          ...customFrequency,
-                          period: 'month'
-                        })
-                      }
-                    >
-                      <Text style={styles.periodButtonText}>Month</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                
-                <Text style={styles.customFrequencyDescription}>
-                  {customFrequency.times} time{customFrequency.times !== 1 ? 's' : ''} per {customFrequency.period}
+                  <Text
+                    style={[
+                      styles.typeOptionText,
+                      {
+                        color: !is_income
+                          ? '#FFFFFF'
+                          : theme.colors.textSecondary,
+                      },
+                    ]}>
+                    Expense
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.typeOption,
+                    is_income && [
+                      styles.typeOptionActive,
+                      {backgroundColor: theme.colors.success},
+                    ],
+                  ]}
+                  onPress={() => setIs_Income(true)}>
+                  <Icon
+                    name="plus"
+                    size={16}
+                    color={is_income ? '#FFFFFF' : theme.colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.typeOptionText,
+                      {
+                        color: is_income
+                          ? '#FFFFFF'
+                          : theme.colors.textSecondary,
+                      },
+                    ]}>
+                    Income
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Amount */}
+            <View style={styles.section}>
+              <Text style={[styles.label, {color: theme.colors.textSecondary}]}>
+                Amount
+              </Text>
+              <View
+                style={[
+                  styles.amountRow,
+                  {backgroundColor: theme.colors.card, ...theme.shadows.medium},
+                ]}>
+                <Text style={[styles.currency, {color: theme.colors.primary}]}>
+                  {currency.symbol}
                 </Text>
+                <TextInput
+                  style={[styles.amountInput, {color: theme.colors.text}]}
+                  value={amount}
+                  onChangeText={setAmount}
+                  placeholder="0.00"
+                  placeholderTextColor={theme.colors.textTertiary}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+            </View>
+
+            {/* Description */}
+            <View style={styles.section}>
+              <Text style={[styles.label, {color: theme.colors.textSecondary}]}>
+                Description
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.colors.card,
+                    color: theme.colors.text,
+                    ...theme.shadows.medium,
+                  },
+                ]}
+                value={description}
+                onChangeText={setDescription}
+                placeholder="What was this for?"
+                placeholderTextColor={theme.colors.textTertiary}
+              />
+            </View>
+
+            {/* Categories - Only for expenses */}
+            {!is_income && (
+              <View style={styles.section}>
+                <View style={styles.labelRow}>
+                  <Text
+                    style={[styles.label, {color: theme.colors.textSecondary}]}>
+                    Category
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.addCategoryBtn, {padding: 12}]} // zwiększ padding
+                    onPress={() => setShowCategoryModal(true)}>
+                    <Icon name="plus" size={14} color={theme.colors.primary} />
+                    <Text
+                      style={[
+                        styles.addCategoryText,
+                        {color: theme.colors.primary},
+                      ]}>
+                      Add
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.categoriesContainer}>
+                  {categories
+                    .filter(category => category.name !== 'Income')
+                    .map(category => (
+                      <TouchableOpacity
+                        key={category.id}
+                        style={[
+                          styles.categoryItem,
+                          {
+                            backgroundColor:
+                              selectedCategory === category.id
+                                ? category.color + '20'
+                                : theme.colors.card,
+                            borderColor:
+                              selectedCategory === category.id
+                                ? category.color
+                                : 'transparent',
+                            width: CATEGORY_WIDTH,
+                            ...(selectedCategory !== category.id
+                              ? theme.shadows.medium
+                              : {}),
+                          },
+                        ]}
+                        onPress={() => setSelectedCategory(category.id)}>
+                        <View
+                          style={[
+                            styles.categoryIcon,
+                            {backgroundColor: category.color},
+                          ]}>
+                          <Icon
+                            name={category.icon}
+                            size={16}
+                            color="#FFFFFF"
+                          />
+                        </View>
+                        <Text
+                          style={[
+                            styles.categoryLabel,
+                            {color: theme.colors.text},
+                          ]}
+                          numberOfLines={1}>
+                          {category.name}
+                        </Text>
+
+                        <TouchableOpacity
+                          style={styles.categoryDelete}
+                          onPress={e => {
+                            e.stopPropagation();
+                            Alert.alert(
+                              'Delete Category',
+                              `Delete "${category.name}"?`,
+                              [
+                                {text: 'Cancel', style: 'cancel'},
+                                {
+                                  text: 'Delete',
+                                  onPress: () =>
+                                    handleDeleteCategory(category.id),
+                                  style: 'destructive',
+                                },
+                              ],
+                            );
+                          }}>
+                          <Icon name="x" size={10} color={theme.colors.error} />
+                        </TouchableOpacity>
+                      </TouchableOpacity>
+                    ))}
+                </View>
               </View>
             )}
+
+            {/* Receipt */}
+            <View style={styles.section}>
+              <Text style={[styles.label, {color: theme.colors.textSecondary}]}>
+                Receipt
+              </Text>
+
+              {!receiptImage ? (
+                <View style={styles.receiptButtons}>
+                  <TouchableOpacity
+                    style={[
+                      styles.receiptBtn,
+                      {
+                        backgroundColor: theme.colors.card,
+                        ...theme.shadows.medium,
+                      },
+                    ]}
+                    onPress={handleTakePhoto}>
+                    <Icon
+                      name="camera"
+                      size={16}
+                      color={theme.colors.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.receiptBtnText,
+                        {color: theme.colors.text},
+                      ]}>
+                      Camera
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.receiptBtn,
+                      {
+                        backgroundColor: theme.colors.card,
+                        ...theme.shadows.medium,
+                      },
+                    ]}
+                    onPress={handleChooseFromLibrary}>
+                    <Icon name="image" size={16} color={theme.colors.primary} />
+                    <Text
+                      style={[
+                        styles.receiptBtnText,
+                        {color: theme.colors.text},
+                      ]}>
+                      Gallery
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.receiptContainer,
+                    {
+                      backgroundColor: theme.colors.card,
+                      ...theme.shadows.medium,
+                    },
+                  ]}>
+                  <View style={styles.receiptPreview}>
+                    <Image
+                      source={{uri: receiptImage.uri}}
+                      style={styles.receiptImg}
+                    />
+                    <TouchableOpacity
+                      style={styles.removeBtn}
+                      onPress={() => setReceiptImage(null)}>
+                      <Icon name="x" size={12} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.analyzeBtn,
+                      {backgroundColor: theme.colors.success},
+                    ]}
+                    onPress={handleAnalyzeReceipt}
+                    disabled={isAnalyzingReceipt}>
+                    {isAnalyzingReceipt ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Icon name="zap" size={16} color="#FFFFFF" />
+                    )}
+                    <Text style={styles.analyzeBtnText}>
+                      {isAnalyzingReceipt ? 'Analyzing...' : 'Analyze'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Recurring */}
+            <View style={[styles.section, styles.recurringSection]}>
+              <View style={styles.switchRow}>
+                <View style={styles.switchLabel}>
+                  <Icon name="repeat" size={16} color={theme.colors.primary} />
+                  <Text
+                    style={[styles.label, {color: theme.colors.textSecondary}]}>
+                    Recurring
+                  </Text>
+                </View>
+                <Switch
+                  value={recurring}
+                  onValueChange={setRecurring}
+                  trackColor={{
+                    false: theme.colors.backgroundTertiary,
+                    true: theme.colors.primary + '40',
+                  }}
+                  thumbColor={
+                    recurring ? theme.colors.primary : theme.colors.textTertiary
+                  }
+                />
+              </View>
+
+              {recurring && (
+                <View style={styles.frequencyContainer}>
+                  <View style={styles.frequencyRow}>
+                    {[
+                      {key: 'daily', label: 'Daily'},
+                      {key: 'weekly', label: 'Weekly'},
+                      {key: 'monthly', label: 'Monthly'},
+                      {key: 'custom', label: 'Custom'},
+                    ].map(freq => (
+                      <TouchableOpacity
+                        key={freq.key}
+                        style={[
+                          styles.freqBtn,
+                          {
+                            backgroundColor:
+                              frequency === freq.key
+                                ? theme.colors.primary
+                                : theme.colors.card,
+                          },
+                        ]}
+                        onPress={() => setFrequency(freq.key)}>
+                        <Text
+                          style={[
+                            styles.freqBtnText,
+                            {
+                              color:
+                                frequency === freq.key
+                                  ? '#FFFFFF'
+                                  : theme.colors.textSecondary,
+                            },
+                          ]}>
+                          {freq.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {frequency === 'custom' && (
+                    <View style={styles.customRow}>
+                      <TextInput
+                        style={[
+                          styles.customInput,
+                          {
+                            backgroundColor: theme.colors.card,
+                            color: theme.colors.text,
+                          },
+                        ]}
+                        value={customFrequency.times.toString()}
+                        onChangeText={text =>
+                          setCustomFrequency({
+                            ...customFrequency,
+                            times: parseInt(text) || 1,
+                          })
+                        }
+                        keyboardType="number-pad"
+                      />
+                      <Text
+                        style={[
+                          styles.customLabel,
+                          {color: theme.colors.textSecondary},
+                        ]}>
+                        times per
+                      </Text>
+                      <View style={styles.periodRow}>
+                        {['day', 'week', 'month'].map(period => (
+                          <TouchableOpacity
+                            key={period}
+                            style={[
+                              styles.periodBtn,
+                              {
+                                backgroundColor:
+                                  customFrequency.period === period
+                                    ? theme.colors.primary
+                                    : theme.colors.card,
+                              },
+                            ]}
+                            onPress={() =>
+                              setCustomFrequency({...customFrequency, period})
+                            }>
+                            <Text
+                              style={[
+                                styles.periodBtnText,
+                                {
+                                  color:
+                                    customFrequency.period === period
+                                      ? '#FFFFFF'
+                                      : theme.colors.textSecondary,
+                                },
+                              ]}>
+                              {period}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.bottomSpace} />
+          </ScrollView>
+
+          {/* Save Button */}
+          <View
+            style={[
+              styles.saveContainer,
+              {backgroundColor: theme.colors.background},
+            ]}>
+            <TouchableOpacity
+              style={[styles.saveBtn, {backgroundColor: theme.colors.primary}]}
+              onPress={handleSave}
+              disabled={isSaving}>
+              {isSaving ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Icon name="check" size={18} color="#FFFFFF" />
+                  <Text style={styles.saveBtnText}>
+                    {editTransaction ? 'Update' : 'Save'} Transaction
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-        )}
-        
-        {/* Save Button */}
-        <TouchableOpacity 
-          style={styles.saveButton} 
-          onPress={handleSave}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.saveButtonText}>
-              {editTransaction ? 'Update' : 'Add'} Transaction
-            </Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
-      
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+
       {/* Add Category Modal */}
       <Modal
         visible={showCategoryModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowCategoryModal(false)}
-      >
+        onRequestClose={() => setShowCategoryModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+          <View
+            style={[styles.modal, {backgroundColor: theme.colors.background}]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add New Category</Text>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                New Category
+              </Text>
               <TouchableOpacity
                 onPress={() => setShowCategoryModal(false)}
-                style={styles.closeButton}
-              >
-                <Icon name="x" size={24} color="#333" />
+                style={[
+                  styles.modalClose,
+                  {backgroundColor: theme.colors.card},
+                ]}>
+                <Icon name="x" size={16} color={theme.colors.textSecondary} />
               </TouchableOpacity>
             </View>
-            
-            {/* Category Name Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Category Name</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter category name"
-                value={newCategoryName}
-                onChangeText={setNewCategoryName}
-              />
-            </View>
-            
-            {/* Category Budget Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Monthly Budget</Text>
-              <View style={styles.amountInputContainer}>
-                <Text style={styles.currencySymbol}>{currency.symbol}</Text>
+
+            <ScrollView style={styles.modalContent}>
+              {/* Name */}
+              <View style={styles.modalSection}>
+                <Text
+                  style={[
+                    styles.modalLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Name
+                </Text>
                 <TextInput
-                  style={styles.amountInput}
-                  keyboardType="decimal-pad"
-                  placeholder="0.00"
-                  value={newCategoryBudget}
-                  onChangeText={setNewCategoryBudget}
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: theme.colors.card,
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  value={newCategoryName}
+                  onChangeText={setNewCategoryName}
+                  placeholder="Category name"
+                  placeholderTextColor={theme.colors.textTertiary}
                 />
               </View>
-            </View>
-            
-            {/* Icon Selection */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Icon</Text>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                style={styles.iconScroll}
-              >
-                {AVAILABLE_ICONS.map(icon => (
-                  <TouchableOpacity
-                    key={icon}
-                    style={[
-                      styles.iconItem,
-                      newCategoryIcon === icon && styles.selectedIconItem
-                    ]}
-                    onPress={() => setNewCategoryIcon(icon)}
-                  >
-                    <Icon name={icon} size={24} color={newCategoryIcon === icon ? "#fff" : "#333"} />
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-            
-            {/* Color Selection */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Color</Text>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                style={styles.colorScroll}
-              >
-                {AVAILABLE_COLORS.map(color => (
-                  <TouchableOpacity
-                    key={color}
-                    style={[
-                      styles.colorItem,
-                      { backgroundColor: color },
-                      newCategoryColor === color && styles.selectedColorItem
-                    ]}
-                    onPress={() => setNewCategoryColor(color)}
+
+              {/* Budget */}
+              <View style={styles.modalSection}>
+                <Text
+                  style={[
+                    styles.modalLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Budget
+                </Text>
+                <View
+                  style={[
+                    styles.amountRow,
+                    {backgroundColor: theme.colors.card},
+                  ]}>
+                  <Text
+                    style={[styles.currency, {color: theme.colors.primary}]}>
+                    {currency.symbol}
+                  </Text>
+                  <TextInput
+                    style={[styles.amountInput, {color: theme.colors.text}]}
+                    value={newCategoryBudget}
+                    onChangeText={setNewCategoryBudget}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    keyboardType="decimal-pad"
                   />
-                ))}
-              </ScrollView>
-            </View>
-            
-            {/* Create Category Button */}
-            <TouchableOpacity 
-              style={styles.createButton} 
+                </View>
+              </View>
+
+              {/* Icons */}
+              <View style={styles.modalSection}>
+                <Text
+                  style={[
+                    styles.modalLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Icon
+                </Text>
+                <View style={styles.iconsGrid}>
+                  {AVAILABLE_ICONS.map(icon => (
+                    <TouchableOpacity
+                      key={icon}
+                      style={[
+                        styles.iconOption,
+                        {
+                          backgroundColor:
+                            newCategoryIcon === icon
+                              ? theme.colors.primary
+                              : theme.colors.card,
+                        },
+                      ]}
+                      onPress={() => setNewCategoryIcon(icon)}>
+                      <Icon
+                        name={icon}
+                        size={16}
+                        color={
+                          newCategoryIcon === icon
+                            ? '#FFFFFF'
+                            : theme.colors.textSecondary
+                        }
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Colors */}
+              <View style={styles.modalSection}>
+                <Text
+                  style={[
+                    styles.modalLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Color
+                </Text>
+                <View style={styles.colorsGrid}>
+                  {AVAILABLE_COLORS.map(color => (
+                    <TouchableOpacity
+                      key={color}
+                      style={[
+                        styles.colorOption,
+                        {backgroundColor: color},
+                        newCategoryColor === color && styles.selectedColor,
+                      ]}
+                      onPress={() => setNewCategoryColor(color)}>
+                      {newCategoryColor === color && (
+                        <Icon name="check" size={12} color="#FFFFFF" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[
+                styles.modalSaveBtn,
+                {backgroundColor: theme.colors.primary},
+              ]}
               onPress={handleAddCategory}
-              disabled={addingCategory}
-            >
+              disabled={addingCategory}>
               {addingCategory ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.createButtonText}>Create Category</Text>
+                <>
+                  <Icon name="plus" size={16} color="#FFFFFF" />
+                  <Text style={styles.modalSaveBtnText}>Create Category</Text>
+                </>
               )}
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-      
+
       {/* Receipt Analysis Modal */}
       <ReceiptAnalysisModal
         visible={showAnalysisModal}
@@ -1006,361 +1048,1807 @@ const AddTransactionScreen = ({ route, navigation }) => {
         receiptImage={receiptImage}
         storeName={storeName}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
-  scrollContent: {
-    padding: 16,
+  safeArea: {
+    flex: 1,
   },
-  centerContainer: {
+  flex: {
+    flex: 1,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  typeToggleContainer: {
-    flexDirection: 'row',
-    marginBottom: 24,
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  typeButton: {
+
+  // Scroll
+  scrollView: {
     flex: 1,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
   },
-  activeTypeButton: {
-    backgroundColor: '#F44336',
+  scrollContent: {
+    padding: 20,
   },
-  incomeButton: {
-    backgroundColor: '#4CAF50',
+
+  // Section
+  section: {
+    marginBottom: 24,
   },
-  typeButtonText: {
-    fontWeight: '600',
-    color: '#666',
+
+  // Type Toggle
+  typeToggle: {
+    flexDirection: 'row',
+    borderRadius: 12,
+    padding: 3,
   },
-  activeTypeButtonText: {
-    color: '#fff',
-  },
-  inputGroup: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-    color: '#333',
-  },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-  },
-  amountInputContainer: {
+  typeOption: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    overflow: 'hidden',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 9,
+    gap: 6,
   },
-  currencySymbol: {
-    paddingHorizontal: 12,
-    fontSize: 18,
-    color: '#666',
+  typeOptionActive: {
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  typeOptionText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Labels
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+
+  // Amount
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  currency: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginRight: 8,
   },
   amountInput: {
     flex: 1,
-    padding: 12,
-    fontSize: 20,
+    fontSize: 24,
+    fontWeight: '300',
+    paddingVertical: 12,
+    textAlign: 'right',
   },
-  categoryHeaderContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  addCategoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 6,
-  },
-  addCategoryButtonText: {
-    marginLeft: 4,
-    color: '#007AFF',
+
+  // Input
+  input: {
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
     fontWeight: '500',
   },
-  categoryScroll: {
-    flexDirection: 'row',
-    marginBottom: 4,
-  },
-  categoryItem: {
-    marginRight: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    minWidth: 80,
-  },
-  selectedCategoryItem: {
-    backgroundColor: '#f0f0f0',
-  },
-  categoryIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  categoryName: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  deleteCategoryButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    padding: 4,
-  },
-  receiptButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  receiptButton: {
+
+  // Add Category
+  addCategoryBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    flex: 0.48,
+    gap: 4,
   },
-  receiptButtonText: {
-    color: '#007AFF',
-    marginLeft: 8,
-    fontWeight: '500',
-  },
-  receiptImageContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  receiptThumbnail: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-    backgroundColor: '#ddd',
-  },
-  receiptImageButtonsContainer: {
-    flexDirection: 'column',
-    marginLeft: 16,
-  },
-  clearImageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  clearImageText: {
-    color: '#FF3B30',
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  analyzeReceiptButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4CAF50',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 12,
-  },
-  analyzeReceiptButtonText: {
-    color: '#fff',
+  addCategoryText: {
+    fontSize: 12,
     fontWeight: '600',
-    marginLeft: 8,
   },
-  switchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  switchLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  recurringOptions: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 24,
-  },
-  frequencyButtonsContainer: {
+
+  // Categories
+  categoriesContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 16,
+    gap: 8,
   },
-  frequencyButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  activeFrequencyButton: {
-    backgroundColor: '#007AFF',
-  },
-  frequencyButtonText: {
-    color: '#666',
-  },
-  activeFrequencyButtonText: {
-    color: '#fff',
-  },
-  customFrequencyContainer: {
-    marginTop: 8,
-  },
-  customFrequencyInputContainer: {
-    flexDirection: 'row',
+  categoryItem: {
+    borderRadius: 12,
+    padding: 12,
     alignItems: 'center',
+    borderWidth: 1.5,
+    position: 'relative',
   },
-  customFrequencyInput: {
-    width: 60,
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 4,
-    padding: 8,
-    marginRight: 8,
+  categoryIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  categoryLabel: {
+    fontSize: 11,
+    fontWeight: '600',
     textAlign: 'center',
   },
-  customFrequencyPeriodContainer: {
-    flexDirection: 'row',
-  },
-  periodButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 4,
-    backgroundColor: '#f0f0f0',
-    marginRight: 8,
-  },
-  activePeriodButton: {
-    backgroundColor: '#007AFF',
-  },
-  periodButtonText: {
-    color: '#666',
-  },
-  customFrequencyDescription: {
-    marginTop: 8,
-    color: '#666',
-    fontStyle: 'italic',
-  },
-  saveButton: {
-    backgroundColor: '#007AFF',
+  categoryDelete: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 16,
+    height: 16,
     borderRadius: 8,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(255,255,255,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  modalContainer: {
-    width: '90%',
-    backgroundColor: '#fff',
+
+  // Receipt
+  receiptButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  receiptBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 6,
+  },
+  receiptBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  receiptContainer: {
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  receiptPreview: {
+    position: 'relative',
+  },
+  receiptImg: {
+    width: 60,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+  },
+  removeBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
     borderRadius: 10,
+    backgroundColor: '#FF3B30',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  analyzeBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 6,
+  },
+  analyzeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // Recurring
+  recurringSection: {
+    marginBottom: 32,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  switchLabel: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  frequencyContainer: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  frequencyRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  freqBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  freqBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  customRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  customInput: {
+    width: 50,
+    height: 36,
+    borderRadius: 8,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  customLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  periodRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  periodBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  periodBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Save
+  saveContainer: {
     padding: 20,
-    maxHeight: '80%',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+  },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderRadius: 14,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  saveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  modal: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  closeButton: {
-    padding: 4,
-  },
-  iconScroll: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  iconItem: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  modalClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
-    backgroundColor: '#f0f0f0',
   },
-  selectedIconItem: {
-    backgroundColor: '#007AFF',
+  modalContent: {
+    padding: 20,
   },
-  colorScroll: {
+  modalSection: {
+    marginBottom: 20,
+  },
+  modalLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modalInput: {
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
+
+  // Icons/Colors Grid
+  iconsGrid: {
     flexDirection: 'row',
-    marginBottom: 16,
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  colorItem: {
+  iconOption: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  selectedColorItem: {
-    borderWidth: 3,
-    borderColor: '#333',
-  },
-  createButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
-    padding: 16,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
   },
-  createButtonText: {
-    color: '#fff',
-    fontSize: 16,
+  colorsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  colorOption: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  selectedColor: {
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+
+  // Modal Save
+  modalSaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 20,
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 6,
+  },
+  modalSaveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '600',
+  },
+
+  bottomSpace: {
+    height: 20,
   },
 });
 
 export default AddTransactionScreen;
+
+// // src/views/AddTransactionScreen.js - Modern, elegant design with better dark mode depth
+// import React, {useState, useEffect} from 'react';
+// import {
+//   View,
+//   Text,
+//   StyleSheet,
+//   TextInput,
+//   TouchableOpacity,
+//   Switch,
+//   ScrollView,
+//   KeyboardAvoidingView,
+//   Platform,
+//   ActivityIndicator,
+//   Modal,
+//   Alert,
+//   Image,
+//   SafeAreaView,
+//   StatusBar,
+// } from 'react-native';
+// import Icon from 'react-native-vector-icons/Feather';
+// import {SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
+// import {SupabaseTransactionController} from '../controllers/SupabaseTransactionController';
+// import {useCurrency} from '../utils/CurrencyContext';
+// import {useTheme} from '../utils/ThemeContext';
+// import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
+// import ReceiptAnalysisModal from './components/ReceiptAnalysisModal';
+
+// // Constant for API URL
+// const URL = 'https://receipts-production.up.railway.app';
+
+// // Array of available icons for categories
+// const AVAILABLE_ICONS = [
+//   'shopping-cart',
+//   'home',
+//   'film',
+//   'truck',
+//   'dollar-sign',
+//   'coffee',
+//   'credit-card',
+//   'gift',
+//   'briefcase',
+//   'car',
+//   'plane',
+//   'book',
+//   'heart',
+//   'smartphone',
+//   'monitor',
+//   'utensils',
+//   'scissors',
+//   'shopping-bag',
+//   'wifi',
+//   'user',
+// ];
+
+// // Array of available colors for categories
+// const AVAILABLE_COLORS = [
+//   '#4CAF50',
+//   '#2196F3',
+//   '#FF9800',
+//   '#795548',
+//   '#E91E63',
+//   '#9C27B0',
+//   '#673AB7',
+//   '#3F51B5',
+//   '#009688',
+//   '#FF5722',
+//   '#607D8B',
+//   '#F44336',
+//   '#FFEB3B',
+//   '#8BC34A',
+//   '#03A9F4',
+// ];
+
+// const AddTransactionScreen = ({route, navigation}) => {
+//   // Get transaction if in edit mode
+//   const editTransaction = route.params?.transaction;
+//   const {currency, formatAmount} = useCurrency();
+//   const {theme, isDark} = useTheme();
+
+//   // State variables
+//   const [amount, setAmount] = useState('');
+//   const [description, setDescription] = useState('');
+//   const [is_income, setIs_Income] = useState(false);
+//   const [selectedCategory, setSelectedCategory] = useState(null);
+//   const [categories, setCategories] = useState([]);
+//   const [loading, setLoading] = useState(true);
+//   const [recurring, setRecurring] = useState(false);
+//   const [frequency, setFrequency] = useState('monthly');
+//   const [customFrequency, setCustomFrequency] = useState({
+//     times: 1,
+//     period: 'week',
+//   });
+//   const [isSaving, setIsSaving] = useState(false);
+
+//   // Category modal state
+//   const [showCategoryModal, setShowCategoryModal] = useState(false);
+//   const [newCategoryName, setNewCategoryName] = useState('');
+//   const [newCategoryIcon, setNewCategoryIcon] = useState('shopping-cart');
+//   const [newCategoryColor, setNewCategoryColor] = useState('#4CAF50');
+//   const [newCategoryBudget, setNewCategoryBudget] = useState('');
+//   const [addingCategory, setAddingCategory] = useState(false);
+
+//   // Receipt image state
+//   const [receiptImage, setReceiptImage] = useState(null);
+//   const [isAnalyzingReceipt, setIsAnalyzingReceipt] = useState(false);
+//   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+//   const [analysisResults, setAnalysisResults] = useState([]);
+//   const [storeName, setStoreName] = useState('');
+
+//   // Controllers
+//   const categoryController = new SupabaseCategoryController();
+//   const transactionController = new SupabaseTransactionController();
+
+//   // Simple card style with different background shades
+//   const getCardStyle = () => {
+//     return [
+//       styles.card,
+//       {
+//         backgroundColor: theme.colors.card,
+//         ...theme.shadows.medium,
+//       }
+//     ];
+//   };
+
+//   // Load data on component mount
+//   useEffect(() => {
+//     loadData();
+//   }, []);
+
+//   // Populate form if editing
+//   useEffect(() => {
+//     if (editTransaction) {
+//       if (editTransaction.is_parent) {
+//         Alert.alert(
+//           'Cannot Edit',
+//           'Receipt transactions cannot be edited directly.',
+//           [{text: 'OK', onPress: () => navigation.goBack()}],
+//         );
+//         return;
+//       }
+
+//       const amountValue =
+//         typeof editTransaction.amount === 'string'
+//           ? editTransaction.amount
+//           : editTransaction.amount.toString();
+//       setAmount(amountValue);
+//       setDescription(editTransaction.description);
+//       setIs_Income(editTransaction.is_income === true);
+//       setSelectedCategory(editTransaction.category);
+
+//       if (editTransaction.recurring) {
+//         setRecurring(true);
+//         setFrequency(editTransaction.frequency);
+//         if (
+//           editTransaction.frequency === 'custom' &&
+//           editTransaction.customFrequency
+//         ) {
+//           setCustomFrequency(editTransaction.customFrequency);
+//         }
+//       }
+//     }
+//   }, [editTransaction, navigation]);
+
+//   const loadData = async () => {
+//     setLoading(true);
+//     try {
+//       const allCategories = await categoryController.getAllCategories();
+//       setCategories(allCategories);
+
+//       if (!selectedCategory && allCategories.length > 0) {
+//         const defaultCategory = is_income
+//           ? allCategories.find(c => c.name === 'Income')?.id
+//           : allCategories.find(c => c.name !== 'Income')?.id;
+//         setSelectedCategory(defaultCategory);
+//       }
+//     } catch (error) {
+//       console.error('Error loading categories:', error);
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
+
+//   const handleAddCategory = async () => {
+//     if (!newCategoryName.trim()) {
+//       Alert.alert('Error', 'Please enter a category name');
+//       return;
+//     }
+
+//     let parsedBudget = 0;
+//     if (newCategoryBudget.trim()) {
+//       const formattedBudget = newCategoryBudget.replace(',', '.');
+//       parsedBudget = parseFloat(formattedBudget);
+
+//       if (isNaN(parsedBudget) || parsedBudget < 0) {
+//         Alert.alert('Error', 'Please enter a valid budget amount');
+//         return;
+//       }
+//     }
+
+//     setAddingCategory(true);
+
+//     try {
+//       const newCategory = {
+//         name: newCategoryName.trim(),
+//         icon: newCategoryIcon,
+//         color: newCategoryColor,
+//         budget: parsedBudget,
+//       };
+
+//       const createdCategory = await categoryController.addCategory(newCategory);
+//       const updatedCategories = await categoryController.getAllCategories();
+//       setCategories(updatedCategories);
+//       setSelectedCategory(createdCategory.id);
+
+//       setShowCategoryModal(false);
+//       setNewCategoryName('');
+//       setNewCategoryIcon('shopping-cart');
+//       setNewCategoryColor('#4CAF50');
+//       setNewCategoryBudget('');
+//     } catch (error) {
+//       console.error('Error adding category:', error);
+//       Alert.alert('Error', 'Failed to create category.');
+//     } finally {
+//       setAddingCategory(false);
+//     }
+//   };
+
+//   const handleTakePhoto = () => {
+//     launchCamera({mediaType: 'photo', quality: 0.8}, response => {
+//       if (
+//         !response.didCancel &&
+//         !response.errorCode &&
+//         response.assets?.length > 0
+//       ) {
+//         setReceiptImage(response.assets[0]);
+//       }
+//     });
+//   };
+
+//   const handleChooseFromLibrary = () => {
+//     launchImageLibrary({mediaType: 'photo', quality: 0.8}, response => {
+//       if (
+//         !response.didCancel &&
+//         !response.errorCode &&
+//         response.assets?.length > 0
+//       ) {
+//         setReceiptImage(response.assets[0]);
+//       }
+//     });
+//   };
+
+//   const handleAnalyzeReceipt = async () => {
+//     if (!receiptImage) return;
+
+//     setIsAnalyzingReceipt(true);
+
+//     try {
+//       const formData = new FormData();
+//       formData.append('receipt', {
+//         uri: receiptImage.uri,
+//         type: receiptImage.type || 'image/jpeg',
+//         name: receiptImage.fileName || 'receipt.jpg',
+//       });
+
+//       const categoriesToSend = categories.map(category => category.name);
+//       formData.append('categories', JSON.stringify(categoriesToSend));
+
+//       const response = await fetch(`${URL}/api/receipt`, {
+//         method: 'POST',
+//         body: formData,
+//         headers: {'Content-Type': 'multipart/form-data'},
+//       });
+
+//       if (!response.ok) throw new Error('Failed to analyze receipt');
+
+//       const data = await response.json();
+
+//       if (data.description) {
+//         setStoreName(data.description.replace('Paragon sklepowy', '').trim());
+//       }
+
+//       if (data.categorized_products) {
+//         const products = [];
+//         Object.entries(data.categorized_products).forEach(
+//           ([categoryName, categoryProducts]) => {
+//             categoryProducts.forEach(product => {
+//               products.push({
+//                 name: product.name,
+//                 category: categoryName,
+//                 price: product.price,
+//               });
+//             });
+//           },
+//         );
+//         setAnalysisResults(products);
+//         setShowAnalysisModal(true);
+//       } else if (data.products && Array.isArray(data.products)) {
+//         setAnalysisResults(data.products);
+//         setShowAnalysisModal(true);
+//       } else {
+//         Alert.alert(
+//           'No products found',
+//           'Could not detect products on receipt.',
+//         );
+//       }
+//     } catch (error) {
+//       Alert.alert('Error', 'Failed to analyze receipt.');
+//     } finally {
+//       setIsAnalyzingReceipt(false);
+//     }
+//   };
+
+//   const handleSave = async () => {
+//     if (editTransaction && editTransaction.is_parent) {
+//       navigation.goBack();
+//       return;
+//     }
+
+//     let formattedAmount = amount.replace(',', '.');
+
+//     if (
+//       !formattedAmount ||
+//       isNaN(parseFloat(formattedAmount)) ||
+//       parseFloat(formattedAmount) <= 0
+//     ) {
+//       Alert.alert('Error', 'Please enter a valid amount');
+//       return;
+//     }
+
+//     if (!description.trim()) {
+//       Alert.alert('Error', 'Please enter a description');
+//       return;
+//     }
+
+//     if (!is_income && !selectedCategory) {
+//       Alert.alert('Error', 'Please select a category');
+//       return;
+//     }
+
+//     setIsSaving(true);
+
+//     try {
+//       const parsedAmount = Math.round(parseFloat(formattedAmount) * 100) / 100;
+//       const categoryId = is_income
+//         ? categories.find(c => c.name === 'Income')?.id
+//         : selectedCategory;
+
+//       if (!categoryId) throw new Error('Could not find appropriate category');
+
+//       const transactionData = {
+//         amount: parsedAmount,
+//         description,
+//         category: categoryId,
+//         is_income: is_income,
+//         date: new Date().toISOString(),
+//         is_parent: false,
+//         parent_id: null,
+//       };
+
+//       if (recurring) {
+//         transactionData.recurring = true;
+//         transactionData.frequency = frequency;
+//         if (frequency === 'custom') {
+//           transactionData.customFrequency = customFrequency;
+//         }
+//       }
+
+//       if (editTransaction) {
+//         await transactionController.updateTransaction(
+//           editTransaction.id,
+//           transactionData,
+//         );
+//       } else {
+//         await transactionController.addTransaction(transactionData);
+//       }
+
+//       navigation.goBack();
+//     } catch (error) {
+//       Alert.alert('Error', 'Failed to save transaction.');
+//     } finally {
+//       setIsSaving(false);
+//     }
+//   };
+
+//   const handleDeleteCategory = async categoryId => {
+//     try {
+//       const categoryToDelete = categories.find(c => c.id === categoryId);
+//       if (
+//         categoryToDelete &&
+//         [
+//           'Income',
+//           'Groceries',
+//           'Housing',
+//           'Entertainment',
+//           'Transportation',
+//         ].includes(categoryToDelete.name)
+//       ) {
+//         Alert.alert('Cannot Delete', 'Default categories cannot be deleted.');
+//         return;
+//       }
+
+//       await categoryController.deleteCategory(categoryId);
+//       const updatedCategories = await categoryController.getAllCategories();
+//       setCategories(updatedCategories);
+
+//       if (selectedCategory === categoryId) {
+//         const defaultCategory = updatedCategories.find(
+//           c => c.name !== 'Income',
+//         )?.id;
+//         setSelectedCategory(defaultCategory);
+//       }
+//     } catch (error) {
+//       Alert.alert('Error', 'Failed to delete category.');
+//     }
+//   };
+
+//   if (loading) {
+//     return (
+//       <View style={[styles.loadingContainer, {backgroundColor: theme.colors.background}]}>
+//         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+//         <View style={styles.loadingContent}>
+//           <View style={[styles.loadingSpinner, {backgroundColor: theme.colors.primary}]}>
+//             <ActivityIndicator size="large" color="#FFFFFF" />
+//           </View>
+//           <Text style={[styles.loadingText, {color: theme.colors.text}]}>
+//             Loading...
+//           </Text>
+//         </View>
+//       </View>
+//     );
+//   }
+
+//   return (
+//     <View style={[styles.container, {backgroundColor: theme.colors.background}]}>
+//       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+
+//       <SafeAreaView style={styles.safeArea}>
+//         <KeyboardAvoidingView
+//           style={styles.flex}
+//           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+//           <ScrollView
+//             style={styles.scrollView}
+//             contentContainerStyle={styles.scrollContent}
+//             showsVerticalScrollIndicator={false}
+//             bounces={true}>
+
+//             {/* Transaction Type Card */}
+//             <View style={[styles.card, {backgroundColor: theme.colors.card, ...theme.shadows.medium}]}>
+//               <Text style={[styles.cardTitle, {color: theme.colors.text}]}>
+//                 Transaction Type
+//               </Text>
+//               <View style={styles.typeToggle}>
+//                 <TouchableOpacity
+//                   style={[
+//                     styles.typeOption,
+//                     !is_income && [styles.typeOptionActive, {backgroundColor: theme.colors.error}],
+//                     !is_income || {backgroundColor: theme.colors.backgroundSecondary}
+//                   ]}
+//                   onPress={() => setIs_Income(false)}
+//                   activeOpacity={0.7}>
+//                   <Icon
+//                     name="minus"
+//                     size={18}
+//                     color={!is_income ? '#FFFFFF' : theme.colors.textSecondary}
+//                   />
+//                   <Text style={[
+//                     styles.typeOptionText,
+//                     {color: !is_income ? '#FFFFFF' : theme.colors.textSecondary}
+//                   ]}>
+//                     Expense
+//                   </Text>
+//                 </TouchableOpacity>
+
+//                 <TouchableOpacity
+//                   style={[
+//                     styles.typeOption,
+//                     is_income && [styles.typeOptionActive, {backgroundColor: theme.colors.success}],
+//                     is_income || {backgroundColor: theme.colors.backgroundSecondary}
+//                   ]}
+//                   onPress={() => setIs_Income(true)}
+//                   activeOpacity={0.7}>
+//                   <Icon
+//                     name="plus"
+//                     size={18}
+//                     color={is_income ? '#FFFFFF' : theme.colors.textSecondary}
+//                   />
+//                   <Text style={[
+//                     styles.typeOptionText,
+//                     {color: is_income ? '#FFFFFF' : theme.colors.textSecondary}
+//                   ]}>
+//                     Income
+//                   </Text>
+//                 </TouchableOpacity>
+//               </View>
+//             </View>
+
+//             {/* Amount Card */}
+//             <View style={[styles.card, {backgroundColor: theme.colors.card, ...theme.shadows.medium}]}>
+//               <Text style={[styles.cardTitle, {color: theme.colors.text}]}>
+//                 Amount
+//               </Text>
+//               <View style={[styles.amountContainer, {backgroundColor: theme.colors.backgroundSecondary}]}>
+//                 <Text style={[styles.currencySymbol, {color: theme.colors.primary}]}>
+//                   {currency.symbol}
+//                 </Text>
+//                 <TextInput
+//                   style={[styles.amountInput, {color: theme.colors.text}]}
+//                   value={amount}
+//                   onChangeText={setAmount}
+//                   placeholder="0.00"
+//                   placeholderTextColor={theme.colors.textTertiary}
+//                   keyboardType="decimal-pad"
+//                 />
+//               </View>
+//             </View>
+
+//             {/* Description Card */}
+//             <View style={[styles.card, {backgroundColor: theme.colors.card, ...theme.shadows.medium}]}>
+//               <Text style={[styles.cardTitle, {color: theme.colors.text}]}>
+//                 Description
+//               </Text>
+//               <TextInput
+//                 style={[
+//                   styles.descriptionInput,
+//                   {
+//                     backgroundColor: theme.colors.backgroundSecondary,
+//                     color: theme.colors.text,
+//                   },
+//                 ]}
+//                 value={description}
+//                 onChangeText={setDescription}
+//                 placeholder="What was this for?"
+//                 placeholderTextColor={theme.colors.textTertiary}
+//                 multiline
+//                 numberOfLines={2}
+//               />
+//             </View>
+
+//             {/* Categories Card - Only for expenses */}
+//             {!is_income && (
+//               <View style={[styles.card, {backgroundColor: theme.colors.card, ...theme.shadows.medium}]}>
+//                 <View style={styles.cardHeader}>
+//                   <Text style={[styles.cardTitle, {color: theme.colors.text}]}>
+//                     Category
+//                   </Text>
+//                   <TouchableOpacity
+//                     style={[styles.addButton, {backgroundColor: theme.colors.primary + '20'}]}
+//                     onPress={() => setShowCategoryModal(true)}
+//                     activeOpacity={0.7}>
+//                     <Icon name="plus" size={16} color={theme.colors.primary} />
+//                     <Text style={[styles.addButtonText, {color: theme.colors.primary}]}>
+//                       Add New
+//                     </Text>
+//                   </TouchableOpacity>
+//                 </View>
+
+//                 <View style={styles.categoriesList}>
+//                   {categories
+//                     .filter(category => category.name !== 'Income')
+//                     .map(category => (
+//                       <TouchableOpacity
+//                         key={category.id}
+//                         style={[
+//                           styles.categoryItem,
+//                           {
+//                             backgroundColor: selectedCategory === category.id
+//                               ? category.color + '20'
+//                               : theme.colors.backgroundSecondary,
+//                             borderColor: selectedCategory === category.id
+//                               ? category.color
+//                               : 'transparent',
+//                           },
+//                         ]}
+//                         onPress={() => setSelectedCategory(category.id)}
+//                         activeOpacity={0.7}>
+//                         <View style={[styles.categoryIcon, {backgroundColor: category.color}]}>
+//                           <Icon name={category.icon} size={18} color="#FFFFFF" />
+//                         </View>
+//                         <View style={styles.categoryInfo}>
+//                           <Text style={[styles.categoryName, {color: theme.colors.text}]}>
+//                             {category.name}
+//                           </Text>
+//                           <Text style={[styles.categoryBudget, {color: theme.colors.textSecondary}]}>
+//                             Budget: {formatAmount(category.budget || 0)}
+//                           </Text>
+//                         </View>
+//                         <TouchableOpacity
+//                           style={styles.deleteButton}
+//                           onPress={(e) => {
+//                             e.stopPropagation();
+//                             Alert.alert(
+//                               'Delete Category',
+//                               `Delete "${category.name}"?`,
+//                               [
+//                                 {text: 'Cancel', style: 'cancel'},
+//                                 {
+//                                   text: 'Delete',
+//                                   onPress: () => handleDeleteCategory(category.id),
+//                                   style: 'destructive',
+//                                 },
+//                               ],
+//                             );
+//                           }}>
+//                           <Icon name="trash-2" size={14} color={theme.colors.error} />
+//                         </TouchableOpacity>
+//                       </TouchableOpacity>
+//                     ))}
+//                 </View>
+//               </View>
+//             )}
+
+//             {/* Receipt Card */}
+//             <View style={[styles.card, {backgroundColor: theme.colors.card, ...theme.shadows.medium}]}>
+//               <Text style={[styles.cardTitle, {color: theme.colors.text}]}>
+//                 Receipt (Optional)
+//               </Text>
+
+//               {!receiptImage ? (
+//                 <View style={styles.receiptActions}>
+//                   <TouchableOpacity
+//                     style={[styles.receiptButton, {backgroundColor: theme.colors.backgroundSecondary}]}
+//                     onPress={handleTakePhoto}
+//                     activeOpacity={0.7}>
+//                     <Icon name="camera" size={20} color={theme.colors.primary} />
+//                     <Text style={[styles.receiptButtonText, {color: theme.colors.text}]}>
+//                       Take Photo
+//                     </Text>
+//                   </TouchableOpacity>
+
+//                   <TouchableOpacity
+//                     style={[styles.receiptButton, {backgroundColor: theme.colors.backgroundSecondary}]}
+//                     onPress={handleChooseFromLibrary}
+//                     activeOpacity={0.7}>
+//                     <Icon name="image" size={20} color={theme.colors.primary} />
+//                     <Text style={[styles.receiptButtonText, {color: theme.colors.text}]}>
+//                       From Gallery
+//                     </Text>
+//                   </TouchableOpacity>
+//                 </View>
+//               ) : (
+//                 <View style={styles.receiptPreview}>
+//                   <View style={styles.receiptImageContainer}>
+//                     <Image source={{uri: receiptImage.uri}} style={styles.receiptImage} />
+//                     <TouchableOpacity
+//                       style={styles.removeReceiptButton}
+//                       onPress={() => setReceiptImage(null)}>
+//                       <Icon name="x" size={14} color="#FFFFFF" />
+//                     </TouchableOpacity>
+//                   </View>
+
+//                   <TouchableOpacity
+//                     style={[styles.analyzeButton, {backgroundColor: theme.colors.success}]}
+//                     onPress={handleAnalyzeReceipt}
+//                     disabled={isAnalyzingReceipt}
+//                     activeOpacity={0.7}>
+//                     {isAnalyzingReceipt ? (
+//                       <ActivityIndicator color="#FFFFFF" size="small" />
+//                     ) : (
+//                       <Icon name="zap" size={18} color="#FFFFFF" />
+//                     )}
+//                     <Text style={styles.analyzeButtonText}>
+//                       {isAnalyzingReceipt ? 'Analyzing...' : 'Analyze Receipt'}
+//                     </Text>
+//                   </TouchableOpacity>
+//                 </View>
+//               )}
+//             </View>
+
+//             {/* Recurring Card */}
+//             <View style={[styles.card, {backgroundColor: theme.colors.card, ...theme.shadows.medium}]}>
+//               <View style={styles.switchRow}>
+//                 <View style={styles.switchInfo}>
+//                   <Icon name="repeat" size={20} color={theme.colors.primary} />
+//                   <View style={styles.switchTextContainer}>
+//                     <Text style={[styles.cardTitle, {color: theme.colors.text}]}>
+//                       Recurring Transaction
+//                     </Text>
+//                     <Text style={[styles.switchSubtitle, {color: theme.colors.textSecondary}]}>
+//                       Set up automatic transactions
+//                     </Text>
+//                   </View>
+//                 </View>
+//                 <Switch
+//                   value={recurring}
+//                   onValueChange={setRecurring}
+//                   trackColor={{
+//                     false: theme.colors.backgroundTertiary,
+//                     true: theme.colors.primary + '40',
+//                   }}
+//                   thumbColor={recurring ? theme.colors.primary : theme.colors.textTertiary}
+//                 />
+//               </View>
+
+//               {recurring && (
+//                 <View style={styles.frequencySection}>
+//                   <Text style={[styles.frequencyLabel, {color: theme.colors.textSecondary}]}>
+//                     Frequency
+//                   </Text>
+//                   <View style={styles.frequencyOptions}>
+//                     {[
+//                       {key: 'daily', label: 'Daily'},
+//                       {key: 'weekly', label: 'Weekly'},
+//                       {key: 'monthly', label: 'Monthly'},
+//                       {key: 'custom', label: 'Custom'},
+//                     ].map(freq => (
+//                       <TouchableOpacity
+//                         key={freq.key}
+//                         style={[
+//                           styles.frequencyButton,
+//                           {
+//                             backgroundColor: frequency === freq.key
+//                               ? theme.colors.primary
+//                               : theme.colors.backgroundSecondary,
+//                           },
+//                         ]}
+//                         onPress={() => setFrequency(freq.key)}
+//                         activeOpacity={0.7}>
+//                         <Text style={[
+//                           styles.frequencyButtonText,
+//                           {
+//                             color: frequency === freq.key
+//                               ? '#FFFFFF'
+//                               : theme.colors.textSecondary,
+//                           }
+//                         ]}>
+//                           {freq.label}
+//                         </Text>
+//                       </TouchableOpacity>
+//                     ))}
+//                   </View>
+
+//                   {frequency === 'custom' && (
+//                     <View style={styles.customFrequency}>
+//                       <View style={styles.customFrequencyRow}>
+//                         <TextInput
+//                           style={[
+//                             styles.customInput,
+//                             {
+//                               backgroundColor: theme.colors.backgroundSecondary,
+//                               color: theme.colors.text,
+//                             },
+//                           ]}
+//                           value={customFrequency.times.toString()}
+//                           onChangeText={text =>
+//                             setCustomFrequency({
+//                               ...customFrequency,
+//                               times: parseInt(text) || 1,
+//                             })
+//                           }
+//                           keyboardType="number-pad"
+//                         />
+//                         <Text style={[styles.customLabel, {color: theme.colors.textSecondary}]}>
+//                           times per
+//                         </Text>
+//                         <View style={styles.periodButtons}>
+//                           {['day', 'week', 'month'].map(period => (
+//                             <TouchableOpacity
+//                               key={period}
+//                               style={[
+//                                 styles.periodButton,
+//                                 {
+//                                   backgroundColor: customFrequency.period === period
+//                                     ? theme.colors.primary
+//                                     : theme.colors.backgroundSecondary,
+//                                 },
+//                               ]}
+//                               onPress={() =>
+//                                 setCustomFrequency({...customFrequency, period})
+//                               }
+//                               activeOpacity={0.7}>
+//                               <Text style={[
+//                                 styles.periodButtonText,
+//                                 {
+//                                   color: customFrequency.period === period
+//                                     ? '#FFFFFF'
+//                                     : theme.colors.textSecondary,
+//                                 }
+//                               ]}>
+//                                 {period}
+//                               </Text>
+//                             </TouchableOpacity>
+//                           ))}
+//                         </View>
+//                       </View>
+//                     </View>
+//                   )}
+//                 </View>
+//               )}
+//             </View>
+
+//             <View style={styles.bottomPadding} />
+//           </ScrollView>
+
+//           {/* Save Button */}
+//           <View style={[
+//             styles.saveContainer,
+//             {backgroundColor: theme.colors.background}
+//           ]}>
+//             <TouchableOpacity
+//               style={[styles.saveButton, {backgroundColor: theme.colors.primary}]}
+//               onPress={handleSave}
+//               disabled={isSaving}
+//               activeOpacity={0.7}>
+//               {isSaving ? (
+//                 <ActivityIndicator color="#FFFFFF" size="small" />
+//               ) : (
+//                 <>
+//                   <Icon name="check" size={20} color="#FFFFFF" />
+//                   <Text style={styles.saveButtonText}>
+//                     {editTransaction ? 'Update Transaction' : 'Save Transaction'}
+//                   </Text>
+//                 </>
+//               )}
+//             </TouchableOpacity>
+//           </View>
+//         </KeyboardAvoidingView>
+//       </SafeAreaView>
+
+//       {/* Add Category Modal */}
+//       <Modal
+//         visible={showCategoryModal}
+//         animationType="slide"
+//         transparent={true}
+//         onRequestClose={() => setShowCategoryModal(false)}>
+//         <View style={styles.modalOverlay}>
+//           <View style={[styles.modal, {backgroundColor: theme.colors.background}]}>
+//             <View style={styles.modalHeader}>
+//               <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+//                 Create New Category
+//               </Text>
+//               <TouchableOpacity
+//                 onPress={() => setShowCategoryModal(false)}
+//                 style={[styles.modalCloseButton, {backgroundColor: theme.colors.backgroundTertiary}]}>
+//                 <Icon name="x" size={18} color={theme.colors.textSecondary} />
+//               </TouchableOpacity>
+//             </View>
+
+//             <ScrollView style={styles.modalContent}>
+//               {/* Name */}
+//               <View style={styles.modalSection}>
+//                 <Text style={[styles.modalLabel, {color: theme.colors.textSecondary}]}>
+//                   Category Name
+//                 </Text>
+//                 <TextInput
+//                   style={[
+//                     styles.modalInput,
+//                     {
+//                       backgroundColor: theme.colors.backgroundSecondary,
+//                       color: theme.colors.text,
+//                     },
+//                   ]}
+//                   value={newCategoryName}
+//                   onChangeText={setNewCategoryName}
+//                   placeholder="Enter category name"
+//                   placeholderTextColor={theme.colors.textTertiary}
+//                 />
+//               </View>
+
+//               {/* Budget */}
+//               <View style={styles.modalSection}>
+//                 <Text style={[styles.modalLabel, {color: theme.colors.textSecondary}]}>
+//                   Monthly Budget (Optional)
+//                 </Text>
+//                 <View style={[styles.amountContainer, {backgroundColor: theme.colors.backgroundSecondary}]}>
+//                   <Text style={[styles.currencySymbol, {color: theme.colors.primary}]}>
+//                     {currency.symbol}
+//                   </Text>
+//                   <TextInput
+//                     style={[styles.amountInput, {color: theme.colors.text}]}
+//                     value={newCategoryBudget}
+//                     onChangeText={setNewCategoryBudget}
+//                     placeholder="0.00"
+//                     placeholderTextColor={theme.colors.textTertiary}
+//                     keyboardType="decimal-pad"
+//                   />
+//                 </View>
+//               </View>
+
+//               {/* Icons */}
+//               <View style={styles.modalSection}>
+//                 <Text style={[styles.modalLabel, {color: theme.colors.textSecondary}]}>
+//                   Choose Icon
+//                 </Text>
+//                 <View style={styles.iconsGrid}>
+//                   {AVAILABLE_ICONS.map(icon => (
+//                     <TouchableOpacity
+//                       key={icon}
+//                       style={[
+//                         styles.iconOption,
+//                         {
+//                           backgroundColor: newCategoryIcon === icon
+//                             ? theme.colors.primary
+//                             : theme.colors.backgroundSecondary,
+//                         },
+//                       ]}
+//                       onPress={() => setNewCategoryIcon(icon)}
+//                       activeOpacity={0.7}>
+//                       <Icon
+//                         name={icon}
+//                         size={18}
+//                         color={newCategoryIcon === icon ? '#FFFFFF' : theme.colors.textSecondary}
+//                       />
+//                     </TouchableOpacity>
+//                   ))}
+//                 </View>
+//               </View>
+
+//               {/* Colors */}
+//               <View style={styles.modalSection}>
+//                 <Text style={[styles.modalLabel, {color: theme.colors.textSecondary}]}>
+//                   Choose Color
+//                 </Text>
+//                 <View style={styles.colorsGrid}>
+//                   {AVAILABLE_COLORS.map(color => (
+//                     <TouchableOpacity
+//                       key={color}
+//                       style={[
+//                         styles.colorOption,
+//                         {backgroundColor: color},
+//                         newCategoryColor === color && styles.selectedColor,
+//                       ]}
+//                       onPress={() => setNewCategoryColor(color)}
+//                       activeOpacity={0.7}>
+//                       {newCategoryColor === color && (
+//                         <Icon name="check" size={14} color="#FFFFFF" />
+//                       )}
+//                     </TouchableOpacity>
+//                   ))}
+//                 </View>
+//               </View>
+//             </ScrollView>
+
+//             <TouchableOpacity
+//               style={[styles.modalSaveButton, {backgroundColor: theme.colors.primary}]}
+//               onPress={handleAddCategory}
+//               disabled={addingCategory}
+//               activeOpacity={0.7}>
+//               {addingCategory ? (
+//                 <ActivityIndicator color="#FFFFFF" size="small" />
+//               ) : (
+//                 <>
+//                   <Icon name="plus" size={18} color="#FFFFFF" />
+//                   <Text style={styles.modalSaveButtonText}>Create Category</Text>
+//                 </>
+//               )}
+//             </TouchableOpacity>
+//           </View>
+//         </View>
+//       </Modal>
+
+//       {/* Receipt Analysis Modal */}
+//       <ReceiptAnalysisModal
+//         visible={showAnalysisModal}
+//         onClose={() => setShowAnalysisModal(false)}
+//         receiptData={analysisResults}
+//         categories={categories}
+//         receiptImage={receiptImage}
+//         storeName={storeName}
+//       />
+//     </View>
+//   );
+// };
+
+// const styles = StyleSheet.create({
+//   container: {
+//     flex: 1,
+//   },
+//   safeArea: {
+//     flex: 1,
+//   },
+//   flex: {
+//     flex: 1,
+//   },
+
+//   // Loading - Matching other screens
+//   loadingContainer: {
+//     flex: 1,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//   },
+//   loadingContent: {
+//     alignItems: 'center',
+//   },
+//   loadingSpinner: {
+//     width: 60,
+//     height: 60,
+//     borderRadius: 30,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//     marginBottom: 24,
+//   },
+//   loadingText: {
+//     fontSize: 18,
+//     fontWeight: '500',
+//   },
+
+//   // Scroll
+//   scrollView: {
+//     flex: 1,
+//   },
+//   scrollContent: {
+//     paddingHorizontal: 24,
+//     paddingTop: 16,
+//     paddingBottom: 100,
+//   },
+
+//   // Cards
+//   card: {
+//     borderRadius: 16,
+//     padding: 20,
+//     marginBottom: 20,
+//   },
+//   cardTitle: {
+//     fontSize: 18,
+//     fontWeight: '600',
+//     marginBottom: 16,
+//   },
+//   cardHeader: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     marginBottom: 16,
+//   },
+
+//   // Type Toggle
+//   typeToggle: {
+//     flexDirection: 'row',
+//     gap: 12,
+//   },
+//   typeOption: {
+//     flex: 1,
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     paddingVertical: 16,
+//     borderRadius: 12,
+//     gap: 8,
+//   },
+//   typeOptionActive: {
+//     shadowColor: '#000',
+//     shadowOffset: {width: 0, height: 2},
+//     shadowOpacity: 0.1,
+//     shadowRadius: 4,
+//     elevation: 3,
+//   },
+//   typeOptionText: {
+//     fontSize: 16,
+//     fontWeight: '600',
+//   },
+
+//   // Amount
+//   amountContainer: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     borderRadius: 12,
+//     paddingHorizontal: 16,
+//   },
+//   currencySymbol: {
+//     fontSize: 20,
+//     fontWeight: '700',
+//     marginRight: 12,
+//   },
+//   amountInput: {
+//     flex: 1,
+//     fontSize: 24,
+//     fontWeight: '300',
+//     paddingVertical: 16,
+//     textAlign: 'right',
+//   },
+
+//   // Description
+//   descriptionInput: {
+//     borderRadius: 12,
+//     paddingHorizontal: 16,
+//     paddingVertical: 16,
+//     fontSize: 16,
+//     textAlignVertical: 'top',
+//     minHeight: 80,
+//   },
+
+//   // Add Button
+//   addButton: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     paddingVertical: 8,
+//     paddingHorizontal: 12,
+//     borderRadius: 12,
+//     gap: 6,
+//   },
+//   addButtonText: {
+//     fontSize: 14,
+//     fontWeight: '600',
+//   },
+
+//   // Categories
+//   categoriesList: {
+//     gap: 12,
+//   },
+//   categoryItem: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     padding: 16,
+//     borderRadius: 12,
+//     borderWidth: 2,
+//     gap: 16,
+//   },
+//   categoryIcon: {
+//     width: 44,
+//     height: 44,
+//     borderRadius: 22,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//   },
+//   categoryInfo: {
+//     flex: 1,
+//   },
+//   categoryName: {
+//     fontSize: 16,
+//     fontWeight: '600',
+//     marginBottom: 4,
+//   },
+//   categoryBudget: {
+//     fontSize: 14,
+//     fontWeight: '500',
+//   },
+//   deleteButton: {
+//     padding: 8,
+//   },
+
+//   // Receipt
+//   receiptActions: {
+//     flexDirection: 'row',
+//     gap: 12,
+//   },
+//   receiptButton: {
+//     flex: 1,
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     paddingVertical: 16,
+//     borderRadius: 12,
+//     gap: 8,
+//   },
+//   receiptButtonText: {
+//     fontSize: 16,
+//     fontWeight: '600',
+//   },
+//   receiptPreview: {
+//     gap: 16,
+//   },
+//   receiptImageContainer: {
+//     alignSelf: 'center',
+//     position: 'relative',
+//   },
+//   receiptImage: {
+//     width: 120,
+//     height: 160,
+//     borderRadius: 12,
+//     backgroundColor: '#f0f0f0',
+//   },
+//   removeReceiptButton: {
+//     position: 'absolute',
+//     top: -8,
+//     right: -8,
+//     width: 24,
+//     height: 24,
+//     borderRadius: 12,
+//     backgroundColor: '#FF3B30',
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//   },
+//   analyzeButton: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     paddingVertical: 16,
+//     borderRadius: 12,
+//     gap: 8,
+//   },
+//   analyzeButtonText: {
+//     color: '#FFFFFF',
+//     fontSize: 16,
+//     fontWeight: '600',
+//   },
+
+//   // Recurring
+//   switchRow: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//   },
+//   switchInfo: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     flex: 1,
+//     gap: 12,
+//   },
+//   switchTextContainer: {
+//     flex: 1,
+//   },
+//   switchSubtitle: {
+//     fontSize: 14,
+//     fontWeight: '500',
+//     marginTop: 2,
+//   },
+//   frequencySection: {
+//     marginTop: 20,
+//     paddingTop: 20,
+//     borderTopWidth: 1,
+//     borderTopColor: 'rgba(0,0,0,0.08)',
+//   },
+//   frequencyLabel: {
+//     fontSize: 16,
+//     fontWeight: '600',
+//     marginBottom: 12,
+//   },
+//   frequencyOptions: {
+//     flexDirection: 'row',
+//     gap: 8,
+//   },
+//   frequencyButton: {
+//     flex: 1,
+//     paddingVertical: 12,
+//     borderRadius: 12,
+//     alignItems: 'center',
+//   },
+//   frequencyButtonText: {
+//     fontSize: 14,
+//     fontWeight: '600',
+//   },
+//   customFrequency: {
+//     marginTop: 16,
+//   },
+//   customFrequencyRow: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     gap: 12,
+//   },
+//   customInput: {
+//     width: 60,
+//     height: 44,
+//     borderRadius: 12,
+//     textAlign: 'center',
+//     fontSize: 16,
+//     fontWeight: '600',
+//   },
+//   customLabel: {
+//     fontSize: 16,
+//     fontWeight: '500',
+//   },
+//   periodButtons: {
+//     flexDirection: 'row',
+//     gap: 6,
+//   },
+//   periodButton: {
+//     paddingVertical: 8,
+//     paddingHorizontal: 12,
+//     borderRadius: 12,
+//   },
+//   periodButtonText: {
+//     fontSize: 14,
+//     fontWeight: '600',
+//   },
+
+//   // Save Button
+//   saveContainer: {
+//     paddingHorizontal: 24,
+//     paddingVertical: 16,
+//     borderTopWidth: 1,
+//     borderTopColor: 'rgba(0,0,0,0.05)',
+//   },
+//   saveButton: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     paddingVertical: 18,
+//     borderRadius: 14,
+//     gap: 8,
+//     shadowColor: '#000',
+//     shadowOffset: {width: 0, height: 2},
+//     shadowOpacity: 0.1,
+//     shadowRadius: 4,
+//     elevation: 3,
+//   },
+//   saveButtonText: {
+//     color: '#FFFFFF',
+//     fontSize: 18,
+//     fontWeight: '600',
+//   },
+
+//   // Modal
+//   modalOverlay: {
+//     flex: 1,
+//     backgroundColor: 'rgba(0,0,0,0.5)',
+//     justifyContent: 'flex-end',
+//   },
+//   modal: {
+//     borderTopLeftRadius: 24,
+//     borderTopRightRadius: 24,
+//     maxHeight: '85%',
+//   },
+//   modalHeader: {
+//     flexDirection: 'row',
+//     justifyContent: 'space-between',
+//     alignItems: 'center',
+//     padding: 24,
+//     borderBottomWidth: 1,
+//     borderBottomColor: 'rgba(0,0,0,0.06)',
+//   },
+//   modalTitle: {
+//     fontSize: 20,
+//     fontWeight: '600',
+//   },
+//   modalCloseButton: {
+//     width: 32,
+//     height: 32,
+//     borderRadius: 16,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//   },
+//   modalContent: {
+//     padding: 24,
+//   },
+//   modalSection: {
+//     marginBottom: 24,
+//   },
+//   modalLabel: {
+//     fontSize: 16,
+//     fontWeight: '600',
+//     marginBottom: 12,
+//   },
+//   modalInput: {
+//     borderRadius: 12,
+//     paddingHorizontal: 16,
+//     paddingVertical: 16,
+//     fontSize: 16,
+//   },
+
+//   // Icons/Colors Grid
+//   iconsGrid: {
+//     flexDirection: 'row',
+//     flexWrap: 'wrap',
+//     gap: 12,
+//   },
+//   iconOption: {
+//     width: 48,
+//     height: 48,
+//     borderRadius: 24,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//   },
+//   colorsGrid: {
+//     flexDirection: 'row',
+//     flexWrap: 'wrap',
+//     gap: 12,
+//   },
+//   colorOption: {
+//     width: 40,
+//     height: 40,
+//     borderRadius: 20,
+//     justifyContent: 'center',
+//     alignItems: 'center',
+//   },
+//   selectedColor: {
+//     shadowColor: '#000',
+//     shadowOffset: {width: 0, height: 2},
+//     shadowOpacity: 0.3,
+//     shadowRadius: 6,
+//     elevation: 6,
+//   },
+
+//   // Modal Save
+//   modalSaveButton: {
+//     flexDirection: 'row',
+//     alignItems: 'center',
+//     justifyContent: 'center',
+//     margin: 24,
+//     paddingVertical: 16,
+//     borderRadius: 14,
+//     gap: 8,
+//   },
+//   modalSaveButtonText: {
+//     color: '#FFFFFF',
+//     fontSize: 16,
+//     fontWeight: '600',
+//   },
+
+//   bottomPadding: {
+//     height: 32,
+//   },
+// });
+
+// export default AddTransactionScreen;

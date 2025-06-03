@@ -224,6 +224,7 @@ const MainTabs = () => {
         component={TransactionsScreen}
         options={{
           title: 'Transactions',
+          headerShown: false,
         }}
       />
       <Tab.Screen
@@ -238,6 +239,7 @@ const MainTabs = () => {
         component={BudgetScreen}
         options={{
           title: 'Budget',
+          headerShown: false,
         }}
       />
       <Tab.Screen
@@ -303,6 +305,7 @@ const AppNavigator = ({isAuthenticated}) => {
         options={{
           title: 'Edit Transaction',
           presentation: 'modal',
+          //presentation: 'card',
         }}
       />
     </Stack.Navigator>
