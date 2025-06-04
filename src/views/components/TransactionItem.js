@@ -67,18 +67,28 @@ const TransactionItem = ({transaction, category, onPress}) => {
 
       {/* Beautiful Amount */}
       <View style={styles.rightSection}>
-        <Text
+        <View
           style={[
-            styles.amount,
+            styles.amountContainer,
             {
-              color: transaction.is_income
-                ? theme.colors.success
-                : theme.colors.error,
+              backgroundColor: transaction.is_income
+                ? theme.colors.success + '15'
+                : theme.colors.error + '15',
             },
           ]}>
-          {transaction.is_income ? '+' : '-'}
-          {formatAmount(Math.abs(transaction.amount))}
-        </Text>
+          <Text
+            style={[
+              styles.amount,
+              {
+                color: transaction.is_income
+                  ? theme.colors.success
+                  : theme.colors.error,
+              },
+            ]}>
+            {transaction.is_income ? '+' : '-'}
+            {formatAmount(Math.abs(transaction.amount))}
+          </Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -138,8 +148,14 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   amount: {
-    fontSize: 16, // Zmniejszone z 17 na 16
+    fontSize: 15, // Zmniejszone z 17 na 16
     fontWeight: '600',
+  },
+
+  amountContainer: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
   },
 });
 

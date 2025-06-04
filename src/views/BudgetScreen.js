@@ -1,4 +1,4 @@
-// src/views/BudgetScreen.js - Clean and consistent design
+// src/views/BudgetScreen.js - Fixed Analytics Dashboard
 import React, {useState, useEffect} from 'react';
 import {
   View,
@@ -6,25 +6,33 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
   Alert,
+  Dimensions,
+  TextInput,
+  Modal,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {SupabaseBudgetController} from '../controllers/SupabaseBudgetController';
 import {SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
 import Icon from 'react-native-vector-icons/Feather';
 import {useCurrency} from '../utils/CurrencyContext';
 import {useTheme} from '../utils/ThemeContext';
+import ChartWebViewFixed from '../components/charts/ChartWebViewFixed';
+
+const {width} = Dimensions.get('window');
 
 const BudgetScreen = ({navigation}) => {
   const [budget, setBudget] = useState({amount: 0});
   const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [editMode, setEditMode] = useState(false);
-  const [editingBudget, setEditingBudget] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState('This Month');
+  const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetInputValue, setBudgetInputValue] = useState('');
   const [editingCategory, setEditingCategory] = useState(null);
 
   const {formatAmount} = useCurrency();
@@ -32,6 +40,14 @@ const BudgetScreen = ({navigation}) => {
 
   const budgetController = new SupabaseBudgetController();
   const categoryController = new SupabaseCategoryController();
+
+  const periods = [
+    'This Week',
+    'This Month',
+    'Last Month',
+    'This Quarter',
+    'This Year',
+  ];
 
   useEffect(() => {
     loadData();
@@ -69,7 +85,7 @@ const BudgetScreen = ({navigation}) => {
 
   const handleSaveBudget = async () => {
     try {
-      const amount = parseFloat(editingBudget.replace(',', '.'));
+      const amount = parseFloat(budgetInputValue.replace(',', '.'));
       if (isNaN(amount) || amount < 0) {
         Alert.alert('Invalid Amount', 'Please enter a valid budget amount');
         return;
@@ -78,7 +94,7 @@ const BudgetScreen = ({navigation}) => {
       const updatedBudget = {...budget, amount};
       await budgetController.setBudget(updatedBudget);
       setBudget(updatedBudget);
-      setEditMode(false);
+      setEditingBudget(false);
       loadData();
     } catch (error) {
       console.error('Error saving budget:', error);
@@ -142,7 +158,103 @@ const BudgetScreen = ({navigation}) => {
     if (!summary) return 0;
     const total = getTotalBudget();
     if (total === 0) return 0;
-    return (summary.totalExpenses / total) * 100; // Usunięte Math.min - teraz może być ponad 100%
+    return (summary.totalExpenses / total) * 100;
+  };
+
+  // Prepare chart data for Chart.js WebView
+  const preparePieChartData = () => {
+    if (
+      !summary ||
+      !summary.spendingByCategory ||
+      summary.spendingByCategory.length === 0
+    ) {
+      return {
+        labels: ['No Data'],
+        datasets: [
+          {
+            data: [1],
+            backgroundColor: [isDark ? '#374151' : '#E5E7EB'],
+          },
+        ],
+      };
+    }
+
+    const colors = [
+      '#6366F1',
+      '#10B981',
+      '#F59E0B',
+      '#EF4444',
+      '#8B5CF6',
+      '#06B6D4',
+      '#EC4899',
+      '#14B8A6',
+    ];
+
+    const validData = summary.spendingByCategory
+      .filter(item => item.spent > 0)
+      .slice(0, 6)
+      .sort((a, b) => b.spent - a.spent);
+
+    return {
+      labels: validData.map(item => item.category.name),
+      datasets: [
+        {
+          data: validData.map(item => item.spent),
+          backgroundColor: validData.map(
+            (item, index) =>
+              item.category.color || colors[index % colors.length],
+          ),
+        },
+      ],
+    };
+  };
+
+  const prepareBarChartData = () => {
+    if (
+      !summary ||
+      !summary.spendingByCategory ||
+      summary.spendingByCategory.length === 0
+    ) {
+      return {
+        labels: ['No Data'],
+        datasets: [
+          {
+            label: 'Spent',
+            data: [0],
+            backgroundColor: [isDark ? '#374151' : '#E5E7EB'],
+          },
+        ],
+      };
+    }
+
+    const validData = summary.spendingByCategory
+      .filter(item => item.category.budget > 0)
+      .slice(0, 5)
+      .sort((a, b) => b.spent - a.spent);
+
+    return {
+      labels: validData.map(item =>
+        item.category.name.length > 8
+          ? item.category.name.substring(0, 8) + '..'
+          : item.category.name,
+      ),
+      datasets: [
+        {
+          label: 'Spent',
+          data: validData.map(item => item.spent),
+          backgroundColor: validData.map(
+            item => item.category.color || '#6366F1',
+          ),
+        },
+        {
+          label: 'Budget',
+          data: validData.map(item => item.category.budget),
+          backgroundColor: validData.map(
+            item => (item.category.color || '#6366F1') + '40',
+          ),
+        },
+      ],
+    };
   };
 
   if (loading) {
@@ -157,20 +269,22 @@ const BudgetScreen = ({navigation}) => {
           backgroundColor={theme.colors.background}
         />
         <View style={styles.loadingContent}>
-          <View
-            style={[
-              styles.loadingSpinner,
-              {backgroundColor: theme.colors.primary},
-            ]}>
-            <ActivityIndicator size="large" color="#FFFFFF" />
-          </View>
+          <LinearGradient
+            colors={
+              isDark ? ['#333', '#444', '#333'] : ['#f0f0f0', '#fff', '#f0f0f0']
+            }
+            style={styles.loadingSpinner}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          </LinearGradient>
           <Text style={[styles.loadingText, {color: theme.colors.text}]}>
-            Loading budget
+            Analyzing your spending
           </Text>
         </View>
       </View>
     );
   }
+
+  const progress = getBudgetProgress();
 
   return (
     <View
@@ -188,90 +302,72 @@ const BudgetScreen = ({navigation}) => {
           bounces={true}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={[styles.headerTitle, {color: theme.colors.text}]}>
-              Budget
-            </Text>
-            <Text
-              style={[
-                styles.headerSubtitle,
-                {color: theme.colors.textSecondary},
-              ]}>
-              {getMonthName(budget.month)} {budget.year}
-            </Text>
+            <View style={styles.headerContent}>
+              <View style={styles.titleContainer}>
+                <Text style={[styles.headerTitle, {color: theme.colors.text}]}>
+                  Budget Analytics
+                </Text>
+                <Text
+                  style={[
+                    styles.headerSubtitle,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  {getMonthName(budget.month)} {budget.year}
+                </Text>
+              </View>
+
+              {/* Period Dropdown */}
+              <TouchableOpacity
+                style={[
+                  styles.periodDropdown,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.1)'
+                      : 'rgba(0, 0, 0, 0.05)',
+                    borderColor: isDark
+                      ? 'rgba(255, 255, 255, 0.15)'
+                      : 'rgba(0, 0, 0, 0.1)',
+                  },
+                ]}
+                onPress={() => setShowPeriodModal(true)}>
+                <Text style={[styles.periodText, {color: theme.colors.text}]}>
+                  {selectedPeriod}
+                </Text>
+                <Icon
+                  name="chevron-down"
+                  size={16}
+                  color={theme.colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* Budget Card - Card-like design with theme support */}
-          <View
-            style={[
-              styles.budgetCard,
-              {
-                backgroundColor: theme.colors.card,
-                ...theme.shadows.medium,
-              },
-            ]}>
-            {editMode ? (
-              <View style={styles.editContainer}>
-                <Text style={[styles.editTitle, {color: theme.colors.text}]}>
-                  Set Monthly Budget
-                </Text>
-                <View
-                  style={[
-                    styles.amountInputContainer,
-                    {backgroundColor: theme.colors.backgroundSecondary},
-                  ]}>
-                  <Text
-                    style={[
-                      styles.currencySymbol,
-                      {color: theme.colors.textSecondary},
-                    ]}>
-                    {useCurrency().currency.symbol}
-                  </Text>
-                  <TextInput
-                    style={[styles.amountInput, {color: theme.colors.text}]}
-                    keyboardType="decimal-pad"
-                    value={editingBudget}
-                    onChangeText={setEditingBudget}
-                    placeholder="0.00"
-                    placeholderTextColor={theme.colors.textTertiary}
-                    autoFocus
-                  />
-                </View>
-                <View style={styles.editButtons}>
-                  <TouchableOpacity
-                    style={[
-                      styles.button,
-                      styles.cancelButton,
-                      {backgroundColor: theme.colors.backgroundTertiary},
-                    ]}
-                    onPress={() => setEditMode(false)}
-                    activeOpacity={0.7}>
-                    <Text
-                      style={[styles.buttonText, {color: theme.colors.text}]}>
-                      Cancel
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.button,
-                      styles.saveButton,
-                      {backgroundColor: theme.colors.primary},
-                    ]}
-                    onPress={handleSaveBudget}
-                    activeOpacity={0.7}>
-                    <Text style={[styles.buttonText, {color: '#FFFFFF'}]}>
-                      Save
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.budgetContent}
-                onPress={() => {
-                  setEditingBudget(budget.amount.toString());
-                  setEditMode(true);
-                }}
-                activeOpacity={0.8}>
+          {/* Simple Budget Card */}
+          <View style={styles.budgetContainer}>
+            <TouchableOpacity
+              style={[
+                styles.budgetCard,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(255, 255, 255, 0.8)',
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
+              ]}
+              onPress={() => {
+                setBudgetInputValue(budget.amount.toString());
+                setEditingBudget(true);
+              }}
+              activeOpacity={0.8}>
+              <LinearGradient
+                colors={
+                  isDark
+                    ? ['rgba(99, 102, 241, 0.1)', 'rgba(79, 70, 229, 0.05)']
+                    : ['rgba(99, 102, 241, 0.05)', 'rgba(79, 70, 229, 0.02)']
+                }
+                style={styles.budgetGradient}>
                 <View style={styles.budgetHeader}>
                   <Text
                     style={[
@@ -286,201 +382,316 @@ const BudgetScreen = ({navigation}) => {
                     color={theme.colors.textSecondary}
                   />
                 </View>
+
                 <Text style={[styles.budgetAmount, {color: theme.colors.text}]}>
                   {formatAmount(budget.amount)}
                 </Text>
-                <Text
-                  style={[
-                    styles.budgetSubtitle,
-                    {color: theme.colors.textTertiary},
-                  ]}>
-                  Tap to edit your budget
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
 
-          {/* Financial Summary Cards */}
-          {summary && (
-            <View style={styles.summaryContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.summaryCard,
-                  {backgroundColor: theme.colors.card, ...theme.shadows.medium},
-                ]}
-                activeOpacity={0.7}>
                 <View
                   style={[
-                    styles.summaryIcon,
-                    {backgroundColor: theme.colors.success + '20'},
-                  ]}>
-                  <Icon
-                    name="trending-up"
-                    size={20}
-                    color={theme.colors.success}
-                  />
-                </View>
-                <View style={styles.summaryContent}>
-                  <Text
-                    style={[
-                      styles.summaryLabel,
-                      {color: theme.colors.textSecondary},
-                    ]}>
-                    Income
-                  </Text>
-                  <Text
-                    style={[
-                      styles.summaryValue,
-                      {color: theme.colors.success},
-                    ]}>
-                    +{formatAmount(summary.totalIncome)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.summaryPeriod,
-                      {color: theme.colors.textTertiary},
-                    ]}>
-                    This month
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.summaryCard,
-                  {backgroundColor: theme.colors.card, ...theme.shadows.medium},
-                ]}
-                activeOpacity={0.7}>
-                <View
-                  style={[
-                    styles.summaryIcon,
-                    {backgroundColor: theme.colors.error + '20'},
-                  ]}>
-                  <Icon
-                    name="trending-down"
-                    size={20}
-                    color={theme.colors.error}
-                  />
-                </View>
-                <View style={styles.summaryContent}>
-                  <Text
-                    style={[
-                      styles.summaryLabel,
-                      {color: theme.colors.textSecondary},
-                    ]}>
-                    Expenses
-                  </Text>
-                  <Text
-                    style={[styles.summaryValue, {color: theme.colors.error}]}>
-                    -{formatAmount(summary.totalExpenses)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.summaryPeriod,
-                      {color: theme.colors.textTertiary},
-                    ]}>
-                    This month
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Budget Progress Card */}
-          {summary && (
-            <View
-              style={[
-                styles.progressCard,
-                {backgroundColor: theme.colors.card, ...theme.shadows.medium},
-              ]}>
-              <View style={styles.progressHeader}>
-                <Text
-                  style={[styles.progressTitle, {color: theme.colors.text}]}>
-                  Budget Progress
-                </Text>
-                <Text
-                  style={[
-                    styles.progressPercentage,
+                    styles.progressBar,
                     {
-                      color:
-                        getBudgetProgress() > 90
-                          ? theme.colors.error
-                          : theme.colors.success,
+                      backgroundColor: isDark
+                        ? 'rgba(255, 255, 255, 0.1)'
+                        : 'rgba(0, 0, 0, 0.05)',
                     },
                   ]}>
-                  {Math.round(getBudgetProgress())}% used
-                </Text>
-              </View>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      {
+                        width: `${Math.min(progress, 100)}%`,
+                        backgroundColor:
+                          progress > 90
+                            ? theme.colors.error
+                            : progress > 70
+                            ? theme.colors.warning
+                            : theme.colors.success,
+                      },
+                    ]}
+                  />
+                </View>
 
-              <View
-                style={[
-                  styles.progressBar,
-                  {backgroundColor: theme.colors.backgroundTertiary},
-                ]}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${getBudgetProgress()}%`,
-                      backgroundColor:
-                        getBudgetProgress() > 90
-                          ? theme.colors.error
-                          : theme.colors.success,
-                    },
-                  ]}
-                />
-              </View>
-
-              <View style={styles.progressFooter}>
                 <Text
                   style={[
                     styles.progressText,
                     {color: theme.colors.textSecondary},
                   ]}>
-                  {formatAmount(summary.totalExpenses)} spent of{' '}
-                  {formatAmount(budget.amount)}
+                  {formatAmount(summary?.totalExpenses || 0)} spent •{' '}
+                  {Math.round(progress)}% used
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+
+          {/* Analytics Cards */}
+          <View style={styles.analyticsRow}>
+            {/* Daily Average */}
+            <View
+              style={[
+                styles.analyticsCard,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(255, 255, 255, 0.8)',
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
+              ]}>
+              <LinearGradient
+                colors={
+                  isDark
+                    ? ['rgba(16, 185, 129, 0.1)', 'rgba(16, 185, 129, 0.05)']
+                    : ['rgba(16, 185, 129, 0.05)', 'rgba(16, 185, 129, 0.02)']
+                }
+                style={styles.analyticsGradient}>
+                <View
+                  style={[
+                    styles.analyticsIcon,
+                    {backgroundColor: theme.colors.success + '20'},
+                  ]}>
+                  <Icon
+                    name="calendar"
+                    size={16}
+                    color={theme.colors.success}
+                  />
+                </View>
+                <Text
+                  style={[
+                    styles.analyticsLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Daily Average
                 </Text>
                 <Text
                   style={[
-                    styles.progressRemaining,
+                    styles.analyticsValue,
                     {color: theme.colors.success},
                   ]}>
-                  {formatAmount(getAvailableBudget())} remaining
+                  {formatAmount(
+                    (summary?.totalExpenses || 0) / new Date().getDate(),
+                  )}
                 </Text>
-              </View>
+              </LinearGradient>
             </View>
-          )}
 
-          {/* Larger Chart Card */}
-          <View
-            style={[
-              styles.chartCard,
-              {backgroundColor: theme.colors.card, ...theme.shadows.medium},
-            ]}>
-            <Text style={[styles.chartTitle, {color: theme.colors.text}]}>
-              Budget Analytics
-            </Text>
+            {/* Remaining Budget */}
             <View
               style={[
-                styles.chartPlaceholder,
-                {backgroundColor: theme.colors.backgroundSecondary},
+                styles.analyticsCard,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(255, 255, 255, 0.8)',
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
               ]}>
-              <Icon
-                name="bar-chart-2"
-                size={48}
-                color={theme.colors.textTertiary}
-              />
-              <Text
-                style={[
-                  styles.placeholderText,
-                  {color: theme.colors.textSecondary},
-                ]}>
-                Detailed charts coming soon
-              </Text>
+              <LinearGradient
+                colors={
+                  isDark
+                    ? ['rgba(99, 102, 241, 0.1)', 'rgba(99, 102, 241, 0.05)']
+                    : ['rgba(99, 102, 241, 0.05)', 'rgba(99, 102, 241, 0.02)']
+                }
+                style={styles.analyticsGradient}>
+                <View
+                  style={[
+                    styles.analyticsIcon,
+                    {backgroundColor: theme.colors.primary + '20'},
+                  ]}>
+                  <Icon name="wallet" size={16} color={theme.colors.primary} />
+                </View>
+                <Text
+                  style={[
+                    styles.analyticsLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Remaining
+                </Text>
+                <Text
+                  style={[
+                    styles.analyticsValue,
+                    {color: theme.colors.primary},
+                  ]}>
+                  {formatAmount(getAvailableBudget())}
+                </Text>
+              </LinearGradient>
             </View>
           </View>
 
-          {/* Clean Categories */}
+          {/* Charts Section */}
+          <View
+            style={[
+              styles.chartsCard,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(255, 255, 255, 0.05)'
+                  : 'rgba(255, 255, 255, 0.8)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.1)'
+                  : 'rgba(0, 0, 0, 0.05)',
+              },
+            ]}>
+            <Text style={[styles.chartsTitle, {color: theme.colors.text}]}>
+              Spending Analysis
+            </Text>
+
+            {/* Charts Container - Fixed the JSX structure here */}
+            {summary &&
+            summary.spendingByCategory &&
+            summary.spendingByCategory.length > 0 ? (
+              <View style={styles.chartsContainer}>
+                {/* Pie Chart */}
+                <View style={styles.chartSection}>
+                  <Text
+                    style={[
+                      styles.chartLabel,
+                      {color: theme.colors.textSecondary},
+                    ]}>
+                    Spending by Category
+                  </Text>
+
+                  <ChartWebViewFixed
+                    type="doughnut"
+                    data={preparePieChartData()}
+                    height={280}
+                    backgroundColor="transparent"
+                    onChartPress={data => {
+                      console.log('Pie chart clicked:', data);
+                      // Handle chart click - maybe navigate to category details
+                    }}
+                  />
+
+                  {/* Legend for WebView charts */}
+                  {summary &&
+                    summary.spendingByCategory &&
+                    summary.spendingByCategory.length > 0 && (
+                      <View style={styles.webviewLegendContainer}>
+                        {summary.spendingByCategory
+                          .filter(item => item.spent > 0)
+                          .slice(0, 4)
+                          .map((item, index) => (
+                            <View key={index} style={styles.legendItem}>
+                              <View
+                                style={[
+                                  styles.legendDot,
+                                  {
+                                    backgroundColor:
+                                      item.category.color || '#6366F1',
+                                  },
+                                ]}
+                              />
+                              <Text
+                                style={[
+                                  styles.legendText,
+                                  {color: theme.colors.textSecondary},
+                                ]}>
+                                {item.category.name}
+                              </Text>
+                              <Text
+                                style={[
+                                  styles.legendAmount,
+                                  {color: theme.colors.text},
+                                ]}>
+                                {formatAmount(item.spent)}
+                              </Text>
+                            </View>
+                          ))}
+                      </View>
+                    )}
+                </View>
+
+                {/* Bar Chart */}
+                {summary &&
+                  summary.spendingByCategory &&
+                  summary.spendingByCategory.length > 0 &&
+                  summary.spendingByCategory.filter(
+                    item => item.category.budget > 0,
+                  ).length > 0 && (
+                    <View style={styles.chartSection}>
+                      <Text
+                        style={[
+                          styles.chartLabel,
+                          {color: theme.colors.textSecondary},
+                        ]}>
+                        Budget vs Spent
+                      </Text>
+
+                      <ChartWebViewFixed
+                        type="bar"
+                        data={prepareBarChartData()}
+                        height={250}
+                        backgroundColor="transparent"
+                        onChartPress={data => {
+                          console.log('Bar chart clicked:', data);
+                          // Handle chart click
+                        }}
+                      />
+
+                      {/* Simple Legend for Bar Chart */}
+                      <View style={styles.barLegend}>
+                        <View style={styles.barLegendItem}>
+                          <View
+                            style={[
+                              styles.legendDot,
+                              {backgroundColor: '#6366F1'},
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.legendText,
+                              {color: theme.colors.textSecondary},
+                            ]}>
+                            Spent
+                          </Text>
+                        </View>
+                        <View style={styles.barLegendItem}>
+                          <View
+                            style={[
+                              styles.legendDot,
+                              {backgroundColor: '#6366F140'},
+                            ]}
+                          />
+                          <Text
+                            style={[
+                              styles.legendText,
+                              {color: theme.colors.textSecondary},
+                            ]}>
+                            Budget
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+              </View>
+            ) : (
+              <View style={styles.emptyCharts}>
+                <Icon
+                  name="pie-chart"
+                  size={48}
+                  color={theme.colors.textTertiary}
+                />
+                <Text
+                  style={[
+                    styles.emptyText,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  No spending data to display
+                </Text>
+                <Text
+                  style={[
+                    styles.emptySubtext,
+                    {color: theme.colors.textTertiary},
+                  ]}>
+                  Start adding transactions to see analytics
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Categories Section */}
           <View style={styles.categoriesSection}>
             <Text style={[styles.categoriesTitle, {color: theme.colors.text}]}>
               Category Budgets
@@ -501,8 +712,12 @@ const BudgetScreen = ({navigation}) => {
                     style={[
                       styles.categoryCard,
                       {
-                        backgroundColor: theme.colors.card,
-                        ...theme.shadows.medium,
+                        backgroundColor: isDark
+                          ? 'rgba(255, 255, 255, 0.05)'
+                          : 'rgba(255, 255, 255, 0.8)',
+                        borderColor: isDark
+                          ? 'rgba(255, 255, 255, 0.1)'
+                          : 'rgba(0, 0, 0, 0.05)',
                       },
                     ]}>
                     {editingCategory && editingCategory.id === category.id ? (
@@ -664,7 +879,11 @@ const BudgetScreen = ({navigation}) => {
                         <View
                           style={[
                             styles.categoryProgressBar,
-                            {backgroundColor: theme.colors.backgroundTertiary},
+                            {
+                              backgroundColor: isDark
+                                ? 'rgba(255, 255, 255, 0.1)'
+                                : 'rgba(0, 0, 0, 0.05)',
+                            },
                           ]}>
                           <View
                             style={[
@@ -708,6 +927,125 @@ const BudgetScreen = ({navigation}) => {
           <View style={styles.bottomPadding} />
         </ScrollView>
       </SafeAreaView>
+
+      {/* Period Modal */}
+      <Modal
+        visible={showPeriodModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPeriodModal(false)}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          onPress={() => setShowPeriodModal(false)}
+          activeOpacity={1}>
+          <View
+            style={[styles.modalContent, {backgroundColor: theme.colors.card}]}>
+            <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+              Select Period
+            </Text>
+            {periods.map(period => (
+              <TouchableOpacity
+                key={period}
+                style={[
+                  styles.periodOption,
+                  selectedPeriod === period && {
+                    backgroundColor: theme.colors.primary + '20',
+                  },
+                ]}
+                onPress={() => {
+                  setSelectedPeriod(period);
+                  setShowPeriodModal(false);
+                }}
+                activeOpacity={0.7}>
+                <Text
+                  style={[
+                    styles.periodOptionText,
+                    {
+                      color:
+                        selectedPeriod === period
+                          ? theme.colors.primary
+                          : theme.colors.text,
+                    },
+                  ]}>
+                  {period}
+                </Text>
+                {selectedPeriod === period && (
+                  <Icon name="check" size={16} color={theme.colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Budget Edit Modal */}
+      <Modal
+        visible={editingBudget}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setEditingBudget(false)}>
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          onPress={() => setEditingBudget(false)}
+          activeOpacity={1}>
+          <View
+            style={[styles.modalContent, {backgroundColor: theme.colors.card}]}>
+            <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+              Set Monthly Budget
+            </Text>
+
+            <View
+              style={[
+                styles.amountInputContainer,
+                {backgroundColor: theme.colors.backgroundSecondary},
+              ]}>
+              <Text
+                style={[
+                  styles.currencySymbol,
+                  {color: theme.colors.textSecondary},
+                ]}>
+                {useCurrency().currency.symbol}
+              </Text>
+              <TextInput
+                style={[styles.amountInput, {color: theme.colors.text}]}
+                keyboardType="decimal-pad"
+                value={budgetInputValue}
+                onChangeText={setBudgetInputValue}
+                placeholder="0.00"
+                placeholderTextColor={theme.colors.textTertiary}
+                autoFocus
+              />
+            </View>
+
+            <View style={styles.editButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  styles.cancelButton,
+                  {backgroundColor: theme.colors.backgroundTertiary},
+                ]}
+                onPress={() => setEditingBudget(false)}
+                activeOpacity={0.7}>
+                <Text style={[styles.buttonText, {color: theme.colors.text}]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  styles.saveButton,
+                  {backgroundColor: theme.colors.primary},
+                ]}
+                onPress={handleSaveBudget}
+                activeOpacity={0.7}>
+                <Text style={[styles.buttonText, {color: '#FFFFFF'}]}>
+                  Save
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 };
@@ -736,43 +1074,69 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingSpinner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 24,
   },
   loadingText: {
     fontSize: 18,
-    fontWeight: '500',
+    fontWeight: '600',
   },
 
   // Header
   header: {
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingTop: 20,
+    paddingBottom: 28,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  titleContainer: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.5,
     marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 16,
     fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+  periodDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+  },
+  periodText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
 
-  // Budget Card - Credit card style
-  budgetCard: {
-    marginHorizontal: 24,
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 24,
+  // Simple Budget Card
+  budgetContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 28,
   },
-  budgetContent: {
-    // No extra styles needed
+  budgetCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  budgetGradient: {
+    padding: 24,
   },
   budgetHeader: {
     flexDirection: 'row',
@@ -781,86 +1145,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   budgetLabel: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '500',
   },
   budgetAmount: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '700',
-    letterSpacing: -0.5,
-    marginBottom: 8,
-  },
-  budgetSubtitle: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  editTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-
-  // Summary Cards
-  summaryContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    gap: 16,
-    marginBottom: 24,
-  },
-  summaryCard: {
-    flex: 1,
-    borderRadius: 16,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  summaryIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  summaryContent: {
-    flex: 1,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  summaryPeriod: {
-    fontSize: 12,
-    fontWeight: '500',
-  },
-
-  // Progress Card
-  progressCard: {
-    marginHorizontal: 24,
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
-  },
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  progressTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  progressPercentage: {
-    fontSize: 16,
-    fontWeight: '700',
+    letterSpacing: -1,
+    marginBottom: 20,
   },
   progressBar: {
     height: 8,
@@ -872,55 +1164,147 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 4,
   },
-  progressFooter: {
-    gap: 4,
-  },
   progressText: {
     fontSize: 14,
     fontWeight: '500',
-  },
-  progressRemaining: {
-    fontSize: 14,
-    fontWeight: '600',
+    textAlign: 'center',
   },
 
-  // Chart Card - Bigger
-  chartCard: {
-    marginHorizontal: 24,
-    borderRadius: 16,
+  // Analytics Row
+  analyticsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    gap: 16,
+    marginBottom: 28,
+  },
+  analyticsCard: {
+    flex: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  analyticsGradient: {
     padding: 20,
-    marginBottom: 24,
+    alignItems: 'center',
+    gap: 8,
   },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 16,
-  },
-  chartPlaceholder: {
-    height: 200,
-    borderRadius: 8,
+  analyticsIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
   },
-  placeholderText: {
+  analyticsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  analyticsValue: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
 
-  // Categories - Clean and readable
+  // Charts
+  chartsCard: {
+    marginHorizontal: 24,
+    borderRadius: 20,
+    marginBottom: 28,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: 20,
+  },
+  chartsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 20,
+  },
+  chartsContainer: {
+    gap: 24,
+  },
+  chartSection: {
+    gap: 16,
+    marginBottom: 24,
+  },
+  chartLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+
+  // WebView Chart Legends
+  webviewLegendContainer: {
+    gap: 8,
+    marginTop: 12,
+  },
+  legendContainer: {
+    gap: 8,
+    marginTop: 12,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 12,
+  },
+  legendText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  legendAmount: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Bar Chart Legend
+  barLegend: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 20,
+    marginTop: 12,
+  },
+  barLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+
+  // No data message
+  noDataMessage: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  noDataText: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+
+  // Categories
   categoriesSection: {
     paddingHorizontal: 24,
   },
   categoriesTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.3,
+    marginBottom: 20,
   },
   categoryCard: {
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
+    borderWidth: 1,
   },
   categoryContent: {
     gap: 12,
@@ -956,6 +1340,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
+  categoryEditButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   categoryProgressBar: {
     height: 6,
     borderRadius: 3,
@@ -971,17 +1362,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'right',
   },
-  categoryEditButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
 
-  // Edit Mode
-  editContainer: {
-    gap: 16,
+  // Editing
+  editingCategory: {
+    gap: 12,
+  },
+  categoryEditHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   amountInputContainer: {
     flexDirection: 'row',
@@ -1000,11 +1388,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     paddingVertical: 10,
     textAlign: 'center',
-  },
-  currencySymbol: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginRight: 8,
   },
   categoryInput: {
     flex: 1,
@@ -1029,13 +1412,38 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // Editing Category
-  editingCategory: {
-    gap: 12,
-  },
-  categoryEditHeader: {
-    flexDirection: 'row',
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  modalContent: {
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    gap: 16,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  periodOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+  },
+  periodOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
   },
 
   bottomPadding: {

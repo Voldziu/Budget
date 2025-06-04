@@ -1,4 +1,4 @@
-// src/views/TransactionDetailScreen.js - Clean, elegant design
+// src/views/TransactionDetailScreen.js - Modernized with glassmorphism
 import React, {useState, useEffect} from 'react';
 import {
   View,
@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
 import {SupabaseTransactionController} from '../controllers/SupabaseTransactionController';
 import {SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
 import Icon from 'react-native-vector-icons/Feather';
@@ -128,13 +129,37 @@ const TransactionDetailScreen = ({route, navigation}) => {
     });
   };
 
+  // Get gradient colors based on transaction type
+  const getAmountGradientColors = () => {
+    const isIncome = transaction?.is_income === true;
+
+    if (isDark) {
+      return isIncome
+        ? ['#1a4d3a', '#0d2818', '#071912', '#0d2818'] // Dark green gradient
+        : ['#4d1a1a', '#280d0d', '#190707', '#280d0d']; // Dark red gradient
+    } else {
+      return isIncome
+        ? ['#e8f5e8', '#f0f9f0', '#f8fcf8', '#f0f9f0'] // Light green gradient
+        : ['#fde8e8', '#fef0f0', '#fff8f8', '#fef0f0']; // Light red gradient
+    }
+  };
+
   if (loading) {
     return (
       <View
         style={[styles.container, {backgroundColor: theme.colors.background}]}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
         <SafeAreaView style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <LinearGradient
+            colors={
+              isDark ? ['#333', '#444', '#333'] : ['#f0f0f0', '#fff', '#f0f0f0']
+            }
+            style={styles.loadingSpinner}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+          </LinearGradient>
+          <Text style={[styles.loadingText, {color: theme.colors.text}]}>
+            Loading transaction details
+          </Text>
         </SafeAreaView>
       </View>
     );
@@ -165,149 +190,344 @@ const TransactionDetailScreen = ({route, navigation}) => {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
-          {/* Main Amount Display */}
-          <View style={styles.amountSection}>
-            <Text
+          {/* Main Amount Display with Glassmorphism */}
+          <View style={styles.amountContainer}>
+            <LinearGradient
+              colors={getAmountGradientColors()}
               style={[
-                styles.amount,
-                {color: isIncome ? theme.colors.success : theme.colors.error},
-              ]}>
-              {isIncome ? '+' : '-'}
-              {formatAmount(transaction.amount)}
-            </Text>
-            <Text style={[styles.description, {color: theme.colors.text}]}>
-              {transaction.description}
-            </Text>
-            <View
-              style={[
-                styles.typeBadge,
+                styles.amountCard,
                 {
-                  backgroundColor: isIncome
-                    ? theme.colors.success + '20'
-                    : theme.colors.error + '20',
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(0, 0, 0, 0.05)',
                 },
-              ]}>
-              <Text
+              ]}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}>
+              <View
                 style={[
-                  styles.typeBadgeText,
-                  {color: isIncome ? theme.colors.success : theme.colors.error},
+                  styles.glassOverlay,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : 'rgba(255, 255, 255, 0.7)',
+                  },
                 ]}>
-                {isIncome ? 'Income' : 'Expense'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Details Section */}
-          <View style={[styles.section, {backgroundColor: theme.colors.card}]}>
-            <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
-              Details
-            </Text>
-
-            {/* Category */}
-            <View style={styles.row}>
-              <Text style={[styles.label, {color: theme.colors.textSecondary}]}>
-                Category
-              </Text>
-              {category ? (
-                <View style={styles.categoryRow}>
-                  <View
-                    style={[
-                      styles.categoryDot,
-                      {backgroundColor: category.color},
-                    ]}
+                {/* Type Badge */}
+                <View
+                  style={[
+                    styles.typeBadge,
+                    {
+                      backgroundColor: isIncome
+                        ? theme.colors.success + '20'
+                        : theme.colors.error + '20',
+                      borderColor: isIncome
+                        ? theme.colors.success + '30'
+                        : theme.colors.error + '30',
+                    },
+                  ]}>
+                  <Icon
+                    name={isIncome ? 'trending-up' : 'trending-down'}
+                    size={16}
+                    color={isIncome ? theme.colors.success : theme.colors.error}
                   />
-                  <Text style={[styles.value, {color: theme.colors.text}]}>
-                    {category.name}
+                  <Text
+                    style={[
+                      styles.typeBadgeText,
+                      {
+                        color: isIncome
+                          ? theme.colors.success
+                          : theme.colors.error,
+                      },
+                    ]}>
+                    {isIncome ? 'Income' : 'Expense'}
                   </Text>
                 </View>
-              ) : (
-                <Text style={[styles.value, {color: theme.colors.text}]}>
-                  No category
-                </Text>
-              )}
-            </View>
 
-            {/* Date */}
-            <View style={styles.row}>
-              <Text style={[styles.label, {color: theme.colors.textSecondary}]}>
-                Date
-              </Text>
-              <Text style={[styles.value, {color: theme.colors.text}]}>
-                {formatDate(transaction.date)}
-              </Text>
-            </View>
-
-            {/* Time */}
-            <View style={styles.row}>
-              <Text style={[styles.label, {color: theme.colors.textSecondary}]}>
-                Time
-              </Text>
-              <Text style={[styles.value, {color: theme.colors.text}]}>
-                {formatTime(transaction.date)}
-              </Text>
-            </View>
-
-            {/* Recurring */}
-            {transaction.recurring && (
-              <View style={styles.row}>
+                {/* Amount */}
                 <Text
-                  style={[styles.label, {color: theme.colors.textSecondary}]}>
-                  Recurring
+                  style={[
+                    styles.amount,
+                    {
+                      color: isIncome
+                        ? theme.colors.success
+                        : theme.colors.error,
+                    },
+                  ]}>
+                  {isIncome ? '+' : '-'}
+                  {formatAmount(transaction.amount)}
                 </Text>
-                <Text style={[styles.value, {color: theme.colors.text}]}>
-                  {transaction.frequency === 'custom'
-                    ? `${transaction.customFrequency?.times || 1} times per ${
-                        transaction.customFrequency?.period || 'month'
-                      }`
-                    : transaction.frequency.charAt(0).toUpperCase() +
-                      transaction.frequency.slice(1)}
+
+                {/* Description */}
+                <Text style={[styles.description, {color: theme.colors.text}]}>
+                  {transaction.description}
                 </Text>
               </View>
-            )}
+            </LinearGradient>
+          </View>
+
+          {/* Details Section with Glassmorphism */}
+          <View style={styles.detailsContainer}>
+            <View
+              style={[
+                styles.detailsCard,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(255, 255, 255, 0.8)',
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
+              ]}>
+              <LinearGradient
+                colors={
+                  isDark
+                    ? ['rgba(255, 255, 255, 0.02)', 'rgba(255, 255, 255, 0.05)']
+                    : ['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']
+                }
+                style={styles.detailsGradient}>
+                <View style={styles.sectionTitleContainer}>
+                  <Icon
+                    name="file-text"
+                    size={18}
+                    color={theme.colors.primary}
+                  />
+                  <Text
+                    style={[styles.sectionTitle, {color: theme.colors.text}]}>
+                    Transaction Details
+                  </Text>
+                </View>
+
+                {/* Category */}
+                <View
+                  style={[
+                    styles.row,
+                    {
+                      borderBottomColor: isDark
+                        ? 'rgba(255,255,255,0.1)'
+                        : 'rgba(0,0,0,0.08)',
+                    },
+                  ]}>
+                  <View style={styles.rowLeft}>
+                    <Icon
+                      name="tag"
+                      size={18}
+                      color={theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.label,
+                        {color: theme.colors.textSecondary},
+                      ]}>
+                      Category
+                    </Text>
+                  </View>
+                  {category ? (
+                    <View
+                      style={[
+                        styles.categoryCapsule,
+                        {
+                          backgroundColor: category.color + '20',
+                          borderColor: category.color + '40',
+                        },
+                      ]}>
+                      <Text
+                        style={[styles.categoryText, {color: category.color}]}>
+                        {category.name}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text
+                      style={[
+                        styles.value,
+                        {color: theme.colors.textSecondary},
+                      ]}>
+                      No category
+                    </Text>
+                  )}
+                </View>
+
+                {/* Date */}
+                <View
+                  style={[
+                    styles.row,
+                    {
+                      borderBottomColor: isDark
+                        ? 'rgba(255,255,255,0.1)'
+                        : 'rgba(0,0,0,0.08)',
+                    },
+                  ]}>
+                  <View style={styles.rowLeft}>
+                    <Icon
+                      name="calendar"
+                      size={18}
+                      color={theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.label,
+                        {color: theme.colors.textSecondary},
+                      ]}>
+                      Date
+                    </Text>
+                  </View>
+                  <Text style={[styles.value, {color: theme.colors.text}]}>
+                    {formatDate(transaction.date)}
+                  </Text>
+                </View>
+
+                {/* Time */}
+                <View
+                  style={[
+                    styles.row,
+                    {
+                      borderBottomColor: isDark
+                        ? 'rgba(255,255,255,0.1)'
+                        : 'rgba(0,0,0,0.08)',
+                      borderBottomWidth: transaction.recurring ? 1 : 0,
+                    },
+                  ]}>
+                  <View style={styles.rowLeft}>
+                    <Icon
+                      name="clock"
+                      size={18}
+                      color={theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.label,
+                        {color: theme.colors.textSecondary},
+                      ]}>
+                      Time
+                    </Text>
+                  </View>
+                  <Text style={[styles.value, {color: theme.colors.text}]}>
+                    {formatTime(transaction.date)}
+                  </Text>
+                </View>
+
+                {/* Recurring */}
+                {transaction.recurring && (
+                  <View style={[styles.row, {borderBottomWidth: 0}]}>
+                    <View style={styles.rowLeft}>
+                      <Icon
+                        name="repeat"
+                        size={18}
+                        color={theme.colors.textSecondary}
+                      />
+                      <Text
+                        style={[
+                          styles.label,
+                          {color: theme.colors.textSecondary},
+                        ]}>
+                        Recurring
+                      </Text>
+                    </View>
+                    <Text style={[styles.value, {color: theme.colors.text}]}>
+                      {transaction.frequency === 'custom'
+                        ? `${
+                            transaction.customFrequency?.times || 1
+                          } times per ${
+                            transaction.customFrequency?.period || 'month'
+                          }`
+                        : transaction.frequency.charAt(0).toUpperCase() +
+                          transaction.frequency.slice(1)}
+                    </Text>
+                  </View>
+                )}
+              </LinearGradient>
+            </View>
           </View>
 
           {/* Recurring Warning */}
           {transaction.isRecurringInstance && (
-            <View
-              style={[
-                styles.warningSection,
-                {backgroundColor: theme.colors.warning + '10'},
-              ]}>
-              <Icon name="info" size={16} color={theme.colors.warning} />
-              <Text style={[styles.warningText, {color: theme.colors.warning}]}>
-                This is a recurring transaction instance
-              </Text>
+            <View style={styles.warningContainer}>
+              <View
+                style={[
+                  styles.warningCard,
+                  {
+                    backgroundColor: theme.colors.warning + '10',
+                    borderColor: theme.colors.warning + '30',
+                  },
+                ]}>
+                <Icon name="info" size={20} color={theme.colors.warning} />
+                <Text
+                  style={[styles.warningText, {color: theme.colors.warning}]}>
+                  This is a recurring transaction instance
+                </Text>
+              </View>
             </View>
           )}
         </ScrollView>
 
-        {/* Action Buttons */}
+        {/* Action Buttons with Glassmorphism */}
         {!transaction.isRecurringInstance && (
           <View
             style={[
               styles.actions,
-              {backgroundColor: theme.colors.background},
+              {
+                backgroundColor: isDark
+                  ? 'rgba(0, 0, 0, 0.9)'
+                  : 'rgba(255, 255, 255, 0.95)',
+                borderTopColor: isDark
+                  ? 'rgba(255, 255, 255, 0.1)'
+                  : 'rgba(0, 0, 0, 0.05)',
+              },
             ]}>
             <TouchableOpacity
               style={[
-                styles.button,
-                styles.editButton,
-                {backgroundColor: theme.colors.primary},
+                styles.actionButton,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.02)',
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.12)'
+                    : 'rgba(0, 0, 0, 0.06)',
+                },
               ]}
-              onPress={handleEdit}>
-              <Icon name="edit-3" size={18} color="#fff" />
-              <Text style={styles.buttonText}>Edit</Text>
+              onPress={handleEdit}
+              activeOpacity={0.8}>
+              <LinearGradient
+                colors={[
+                  theme.colors.primary + 'DD',
+                  theme.colors.primary + 'BB',
+                ]}
+                style={styles.buttonGradient}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 1}}>
+                <View style={styles.buttonIconContainer}>
+                  <Icon name="edit-3" size={14} color="#fff" />
+                </View>
+                <Text style={styles.buttonText}>Edit</Text>
+              </LinearGradient>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[
-                styles.button,
-                styles.deleteButton,
-                {backgroundColor: theme.colors.error},
+                styles.actionButton,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.08)'
+                    : 'rgba(0, 0, 0, 0.02)',
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.12)'
+                    : 'rgba(0, 0, 0, 0.06)',
+                },
               ]}
-              onPress={handleDelete}>
-              <Icon name="trash-2" size={18} color="#fff" />
-              <Text style={styles.buttonText}>Delete</Text>
+              onPress={handleDelete}
+              activeOpacity={0.8}>
+              <LinearGradient
+                colors={[theme.colors.error + 'DD', theme.colors.error + 'BB']}
+                style={styles.buttonGradient}
+                start={{x: 0, y: 0}}
+                end={{x: 1, y: 1}}>
+                <View style={styles.buttonIconContainer}>
+                  <Icon name="trash-2" size={14} color="#fff" />
+                </View>
+                <Text style={styles.buttonText}>Delete</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         )}
@@ -329,51 +549,97 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   scrollContent: {
-    padding: 24,
     paddingBottom: 120,
   },
-  errorText: {
+  loadingSpinner: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  loadingText: {
     fontSize: 18,
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  errorText: {
+    fontSize: 20,
+    fontWeight: '600',
+    letterSpacing: -0.3,
   },
 
-  // Amount Section
-  amountSection: {
+  // Amount Section with Glassmorphism
+  amountContainer: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    marginBottom: 28,
+  },
+  amountCard: {
+    borderRadius: 28,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  glassOverlay: {
+    padding: 32,
     alignItems: 'center',
-    paddingVertical: 40,
-  },
-  amount: {
-    fontSize: 48,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  description: {
-    fontSize: 20,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginBottom: 16,
-    lineHeight: 28,
+    borderRadius: 28,
   },
   typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    gap: 6,
   },
   typeBadgeText: {
     fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  amount: {
+    fontSize: 56,
+    fontWeight: '300',
+    letterSpacing: -2,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  description: {
+    fontSize: 22,
     fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 30,
+    letterSpacing: -0.3,
   },
 
-  // Section
-  section: {
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 24,
+  // Details Section with Glassmorphism
+  detailsContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  detailsCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  detailsGradient: {
+    paddingVertical: 24,
+  },
+  sectionTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 24,
+    paddingHorizontal: 24,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 20,
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: -0.3,
   },
 
   // Rows
@@ -381,13 +647,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  rowLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   label: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   value: {
     fontSize: 16,
@@ -395,68 +667,80 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     flex: 1,
     marginLeft: 16,
+    letterSpacing: 0.2,
   },
 
   // Category
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'flex-end',
+  categoryCapsule: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
   },
-  categoryDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 8,
+  categoryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 
   // Warning
-  warningSection: {
+  warningContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+  },
+  warningCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderRadius: 12,
-    marginTop: 16,
-    gap: 12,
+    padding: 20,
+    borderRadius: 16,
+    gap: 16,
+    borderWidth: 1,
   },
   warningText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     flex: 1,
+    letterSpacing: 0.2,
   },
 
-  // Actions
+  // Actions with Glassmorphism
   actions: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     flexDirection: 'row',
-    padding: 24,
+    padding: 20,
     gap: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
   },
-  button: {
+  actionButton: {
     flex: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  buttonGradient: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+  },
+  buttonIconContainer: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   buttonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-  },
-  editButton: {
-    // backgroundColor set in component
-  },
-  deleteButton: {
-    // backgroundColor set in component
+    letterSpacing: 0.3,
   },
 });
 
