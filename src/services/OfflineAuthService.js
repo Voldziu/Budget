@@ -1,11 +1,11 @@
-// 3. Enhanced Auth Service with Offline Support
-// src/services/OfflineAuthService.js
+// src/services/OfflineAuthService.js - POPRAWIONY
 import { AuthService } from './AuthService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineStorageManager } from '../utils/OfflineStorageManager';
 
 export class OfflineAuthService extends AuthService {
   static OFFLINE_AUTH_KEY = 'offline_auth_status';
+  static USER_DATA_KEY = 'offline_user_data';
 
   async isAuthenticated() {
     const isOnline = await OfflineStorageManager.isOnline();
@@ -14,11 +14,25 @@ export class OfflineAuthService extends AuthService {
       try {
         const result = await super.isAuthenticated();
         
-        // Cache auth status
+        // WAŻNE: Cache auth status I user data
         await AsyncStorage.setItem(
           OfflineAuthService.OFFLINE_AUTH_KEY, 
-          JSON.stringify({ authenticated: result, timestamp: Date.now() })
+          JSON.stringify({ 
+            authenticated: result, 
+            timestamp: Date.now() 
+          })
         );
+
+        // Cache user data jeśli authenticated
+        if (result) {
+          const user = await super.getCurrentUser();
+          if (user) {
+            await AsyncStorage.setItem(
+              OfflineAuthService.USER_DATA_KEY,
+              JSON.stringify(user)
+            );
+          }
+        }
         
         return result;
       } catch (error) {
@@ -33,21 +47,60 @@ export class OfflineAuthService extends AuthService {
   async isAuthenticatedOffline() {
     try {
       const cached = await AsyncStorage.getItem(OfflineAuthService.OFFLINE_AUTH_KEY);
-      if (!cached) return false;
+      if (!cached) {
+        console.log('No offline auth cache found');
+        return false;
+      }
 
       const { authenticated, timestamp } = JSON.parse(cached);
       
-      // Cache valid for 7 days offline
-      const maxAge = 7 * 24 * 60 * 60 * 1000;
+      // Cache valid for 30 days offline (zwiększone z 7)
+      const maxAge = 30 * 24 * 60 * 60 * 1000;
       
       if (Date.now() - timestamp > maxAge) {
+        console.log('Offline auth cache expired');
         return false;
       }
       
+      console.log('Using cached offline authentication');
       return authenticated;
     } catch (error) {
       console.error('Error checking offline auth:', error);
       return false;
+    }
+  }
+
+  // Nowa metoda - get offline user data
+  async getCurrentUser() {
+    const isOnline = await OfflineStorageManager.isOnline();
+    
+    if (isOnline) {
+      try {
+        return await super.getCurrentUser();
+      } catch (error) {
+        return await this.getOfflineUserData();
+      }
+    } else {
+      return await this.getOfflineUserData();
+    }
+  }
+
+  async getOfflineUserData() {
+    try {
+      const cached = await AsyncStorage.getItem(OfflineAuthService.USER_DATA_KEY);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+      
+      // Return mock user data for offline mode
+      return {
+        id: 'offline_user',
+        email: 'offline@user.com',
+        isOffline: true
+      };
+    } catch (error) {
+      console.error('Error getting offline user data:', error);
+      return null;
     }
   }
 
@@ -63,10 +116,9 @@ export class OfflineAuthService extends AuthService {
     }
     
     // Always clear offline cache
-    await AsyncStorage.removeItem(OfflineAuthService.OFFLINE_AUTH_KEY);
-    
-    // Clear all offline data
     await AsyncStorage.multiRemove([
+      OfflineAuthService.OFFLINE_AUTH_KEY,
+      OfflineAuthService.USER_DATA_KEY,
       OfflineStorageManager.KEYS.TRANSACTIONS,
       OfflineStorageManager.KEYS.CATEGORIES,
       OfflineStorageManager.KEYS.BUDGET,

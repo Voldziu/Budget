@@ -29,6 +29,7 @@ import ReceiptAnalysisModal from './components/ReceiptAnalysisModal';
 import { OfflineTransactionController } from '../controllers/OfflineTransactionController';
 import { OfflineCategoryController } from '../controllers/OfflineCategoryController';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import {OfflineBanner} from './components/OfflineBanner';
 
 const {width} = Dimensions.get('window');
 

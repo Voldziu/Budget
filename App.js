@@ -156,10 +156,9 @@ const CustomTabBar = ({state, descriptors, navigation}) => {
               <View
                 style={[
                   styles.tabButtonContent,
-                  isFocused && [
-                    styles.tabButtonActive,
-                    {backgroundColor: theme.colors.primary + '15'},
-                  ],
+                  isFocused && {
+                    backgroundColor: theme.colors.primary + '15',
+                  },
                 ]}>
                 <Icon
                   name={getIconName(route.name)}
@@ -193,7 +192,7 @@ const AuthNavigator = () => {
   );
 };
 
-// Main tab navigator - UPDATED z custom tab bar
+// Main tab navigator - UPDATED z custom tab bar i obsługą klawiatury
 const MainTabs = () => {
   const {theme} = useTheme();
 
@@ -201,6 +200,7 @@ const MainTabs = () => {
     <Tab.Navigator
       tabBar={props => <CustomTabBar {...props} />}
       screenOptions={{
+        keyboardHidesTabBar: true, // UKRYWA TAB BAR PRZY KLAWIATURZE
         headerStyle: {
           backgroundColor: theme.colors.surface,
           elevation: 0,
@@ -235,6 +235,7 @@ const MainTabs = () => {
         component={AddTransactionScreen}
         options={{
           tabBarStyle: {display: 'none'}, // Hide tab bar on this screen
+          keyboardHidesTabBar: true, // Dodatkowe zabezpieczenie
         }}
       />
       <Tab.Screen
@@ -491,13 +492,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: 16, // ZAOKRĄGLONE ROGI DLA WSZYSTKICH
     minWidth: 48,
     minHeight: 48,
   },
-  tabButtonActive: {
-    // backgroundColor is set dynamically
-  },
+  // USUNIĘTE tabButtonActive - nie jest już potrzebne
   tabLabel: {
     fontSize: 12,
     marginTop: 4,

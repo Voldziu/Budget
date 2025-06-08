@@ -319,7 +319,7 @@ const AnalyticsDashboard = ({navigation}) => {
     <View
       style={[styles.container, {backgroundColor: theme.colors.background}]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-            <OfflineBanner />
+      {/* <OfflineBanner /> */}
       
 
       <SafeAreaView style={styles.safeArea}>

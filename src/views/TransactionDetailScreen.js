@@ -19,6 +19,8 @@ import {useCurrency} from '../utils/CurrencyContext';
 import {useTheme} from '../utils/ThemeContext';
 import {OfflineTransactionController} from '../controllers/OfflineTransactionController';
 import {OfflineCategoryController} from '../controllers/OfflineCategoryController';
+import { OfflineBanner } from './components/OfflineBanner';
+
 
 const TransactionDetailScreen = ({route, navigation}) => {
   const {id} = route.params;
