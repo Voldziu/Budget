@@ -18,12 +18,13 @@ import {supabase, TABLES} from '../utils/supabase';
 import {CommonActions} from '@react-navigation/native';
 import {useCurrency, CURRENCIES} from '../utils/CurrencyContext';
 import {useTheme} from '../utils/ThemeContext';
+import {OfflineAuthService} from '../services/OfflineAuthService';
 
 const SettingsScreen = ({navigation}) => {
   const [notifications, setNotifications] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
-  const authService = new AuthService();
+  const authService = new OfflineAuthService();
 
   // Get currency and theme contexts
   const {currency, changeCurrency, availableCurrencies} = useCurrency();

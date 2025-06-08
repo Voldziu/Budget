@@ -22,6 +22,10 @@ import {useCurrency} from '../utils/CurrencyContext';
 import {useTheme} from '../utils/ThemeContext';
 import ChartWebViewFixed from '../components/charts/ChartWebViewFixed';
 
+import {OfflineBudgetController} from '../controllers/OfflineBudgetController';
+import {OfflineCategoryController} from '../controllers/OfflineCategoryController';
+import {OfflineBanner} from './components/OfflineBanner';
+
 const {width} = Dimensions.get('window');
 
 const BudgetScreen = ({navigation}) => {
@@ -38,8 +42,10 @@ const BudgetScreen = ({navigation}) => {
   const {formatAmount} = useCurrency();
   const {theme, isDark} = useTheme();
 
-  const budgetController = new SupabaseBudgetController();
-  const categoryController = new SupabaseCategoryController();
+  // const budgetController = new SupabaseBudgetController();
+  // const categoryController = new SupabaseCategoryController();
+    const budgetController = new OfflineBudgetController();
+  const categoryController = new OfflineCategoryController();
 
   const periods = [
     'This Week',
@@ -268,6 +274,8 @@ const BudgetScreen = ({navigation}) => {
           barStyle={isDark ? 'light-content' : 'dark-content'}
           backgroundColor={theme.colors.background}
         />
+              <OfflineBanner />
+        
         <View style={styles.loadingContent}>
           <LinearGradient
             colors={

@@ -20,7 +20,9 @@ import {useCurrency} from '../utils/CurrencyContext';
 import TransactionItem from './components/TransactionItem';
 import TransactionGroupItem from './components/TransactionGroupItem';
 import Icon from 'react-native-vector-icons/Feather';
-
+import {OfflineTransactionController} from '../controllers/OfflineTransactionController';
+import {OfflineCategoryController} from '../controllers/OfflineCategoryController';
+import {OfflineBanner} from './components/OfflineBanner';
 const TransactionsScreen = ({navigation}) => {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -38,8 +40,8 @@ const TransactionsScreen = ({navigation}) => {
   const [childTransactions, setChildTransactions] = useState({});
   const [loadingChildren, setLoadingChildren] = useState({});
 
-  const transactionController = new SupabaseTransactionController();
-  const categoryController = new SupabaseCategoryController();
+  const transactionController = new OfflineTransactionController();
+  const categoryController = new OfflineCategoryController();
   const {theme, isDark} = useTheme();
   const {formatAmount} = useCurrency();
 
@@ -351,6 +353,8 @@ const TransactionsScreen = ({navigation}) => {
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
+            <OfflineBanner />
+      
 
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}

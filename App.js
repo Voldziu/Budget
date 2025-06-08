@@ -30,6 +30,9 @@ import SettingsScreen from './src/views/SettingsScreen';
 import TransactionDetailScreen from './src/views/TransactionDetailScreen';
 import LoginScreen from './src/views/LoginScreen';
 
+import { OfflineAuthService } from './src/services/OfflineAuthService';
+import NetInfo from '@react-native-community/netinfo';
+
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 const AuthStack = createStackNavigator();
@@ -331,17 +334,30 @@ const LoadingScreen = () => {
 const App = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const authService = new AuthService();
+  //const authService = new AuthService();
   const navigationRef = useRef(null);
 
+  const authService = new OfflineAuthService();
+
+  useEffect(() => {
+    checkAuthStatus();
+    
+    // Listen for network changes
+    const unsubscribe = NetInfo.addEventListener(state => {
+      console.log('Network state changed:', state.isConnected);
+    });
+
+    return unsubscribe;
+  }, []);
+
   // Function to check authentication status
-  const checkAuth = async () => {
+  const checkAuthStatus = async () => {
     try {
       const authenticated = await authService.isAuthenticated();
-      console.log('Authentication check result:', authenticated);
       setIsAuthenticated(authenticated);
     } catch (error) {
       console.error('Auth check error:', error);
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
@@ -356,7 +372,8 @@ const App = () => {
     try {
       if (url.includes('auth/callback')) {
         console.log('Auth callback detected in deep link');
-        await checkAuth();
+        await checkAuthStatus();
+;
       }
 
       if (url.includes('reset-password')) {
@@ -398,7 +415,7 @@ const App = () => {
 
   // Set up authentication checking and listener
   useEffect(() => {
-    checkAuth();
+checkAuthStatus();
 
     const {data: authListener} = supabase.auth.onAuthStateChange(
       async (event, session) => {
@@ -514,6 +531,37 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+  },
+});
+
+const offlineStyles = StyleSheet.create({
+  syncBanner: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  syncText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  offlineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    gap: 8,
+    backgroundColor: 'rgba(255, 193, 7, 0.1)',
+  },
+  offlineText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  offlineWarning: {
+    textAlign: 'center',
+    fontStyle: 'italic',
+    color: '#666',
+    marginTop: 8,
   },
 });
 

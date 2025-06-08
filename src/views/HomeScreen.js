@@ -882,6 +882,12 @@ import TransactionItem from './components/TransactionItem';
 import TransactionGroupItem from './components/TransactionGroupItem';
 import Icon from 'react-native-vector-icons/Feather';
 
+import { OfflineTransactionController } from '../controllers/OfflineTransactionController';
+import { OfflineBudgetController } from '../controllers/OfflineBudgetController';
+import { OfflineCategoryController } from '../controllers/OfflineCategoryController';
+import { OfflineBanner } from './components/OfflineBanner';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+
 const {width, height} = Dimensions.get('window');
 
 const HomeScreen = ({navigation}) => {
@@ -893,9 +899,16 @@ const HomeScreen = ({navigation}) => {
   const [childTransactions, setChildTransactions] = useState({});
   const [loadingChildren, setLoadingChildren] = useState({});
 
-  const budgetController = new SupabaseBudgetController();
-  const transactionController = new SupabaseTransactionController();
-  const categoryController = new SupabaseCategoryController();
+  // const budgetController = new SupabaseBudgetController();
+  // const transactionController = new SupabaseTransactionController();
+  // const categoryController = new SupabaseCategoryController();
+
+  const budgetController = new OfflineBudgetController();
+  const transactionController = new OfflineTransactionController();
+  const categoryController = new OfflineCategoryController();
+
+  const [syncStatus, setSyncStatus] = useState(null); // 'syncing', 'success', 'error'
+  const { isOnline, isConnecting } = useNetworkStatus();
 
   const {formatAmount} = useCurrency();
   const {theme, isDark} = useTheme();
@@ -907,6 +920,42 @@ const HomeScreen = ({navigation}) => {
     });
     return unsubscribe;
   }, [navigation]);
+
+  // const loadData = async () => {
+  //   setLoading(true);
+  //   try {
+  //     const date = new Date();
+  //     const currentMonth = date.getMonth();
+  //     const currentYear = date.getFullYear();
+
+  //     const allCategories = await categoryController.getAllCategories();
+  //     setCategories(allCategories);
+
+  //     const spendingSummary = await budgetController.getSpendingSummary(
+  //       currentMonth,
+  //       currentYear,
+  //     );
+
+  //     const transactions = await transactionController.getAllTransactions();
+
+  //     const recent = transactions
+  //       .sort((a, b) => new Date(b.date) - new Date(a.date))
+  //       .slice(0, 4);
+
+  //     setSummary(spendingSummary);
+  //     setRecentTransactions(recent);
+
+  //     setExpandedParents({});
+  //     setChildTransactions({});
+
+  //     console.log('Home data loaded successfully');
+  //   } catch (error) {
+  //     console.error('Error loading home data:', error);
+  //     Alert.alert('Error', 'Failed to load data. Please try again.');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   const loadData = async () => {
     setLoading(true);
@@ -935,14 +984,43 @@ const HomeScreen = ({navigation}) => {
       setExpandedParents({});
       setChildTransactions({});
 
-      console.log('Home data loaded successfully');
+      console.log('Home data loaded successfully (offline mode)');
     } catch (error) {
       console.error('Error loading home data:', error);
-      Alert.alert('Error', 'Failed to load data. Please try again.');
+      // Don't show alert in offline mode - just log
+      if (isOnline) {
+        Alert.alert('Error', 'Failed to load data. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOnline && !isConnecting) {
+      syncOfflineData();
+    }
+  }, [isOnline, isConnecting]);
+
+  const syncOfflineData = async () => {
+    setSyncStatus('syncing');
+    try {
+      await transactionController.syncPendingOperations();
+      await budgetController.syncPendingOperations();
+      await categoryController.syncPendingOperations();
+      
+      // Reload data after sync
+      await loadData();
+      
+      setSyncStatus('success');
+      setTimeout(() => setSyncStatus(null), 3000);
+    } catch (error) {
+      console.error('Sync failed:', error);
+      setSyncStatus('error');
+      setTimeout(() => setSyncStatus(null), 5000);
+    }
+  };
+
 
   const getDynamicFontSize = amount => {
     const formattedAmount = formatAmount(amount);
@@ -1113,6 +1191,26 @@ const HomeScreen = ({navigation}) => {
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
+      <OfflineBanner />
+
+      {syncStatus && (
+        <View style={[
+          styles.syncBanner, 
+          { 
+            backgroundColor: syncStatus === 'error' 
+              ? theme.colors.error 
+              : syncStatus === 'success' 
+                ? theme.colors.success 
+                : theme.colors.primary 
+          }
+        ]}>
+          <Text style={styles.syncText}>
+            {syncStatus === 'syncing' && 'Syncing data...'}
+            {syncStatus === 'success' && 'Data synced successfully!'}
+            {syncStatus === 'error' && 'Sync failed. Will retry later.'}
+          </Text>
+        </View>
+      )}
 
       <SafeAreaView style={styles.safeArea}>
         <ScrollView

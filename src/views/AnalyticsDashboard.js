@@ -21,6 +21,10 @@ import {useCurrency} from '../utils/CurrencyContext';
 import {useTheme} from '../utils/ThemeContext';
 import ChartWebViewFixed from '../components/charts/ChartWebViewFixed';
 
+import {OfflineBudgetController} from '../controllers/OfflineBudgetController';
+import {OfflineCategoryController} from '../controllers/OfflineCategoryController';
+import {OfflineBanner} from './components/OfflineBanner'
+
 const {width, height} = Dimensions.get('window');
 
 const AnalyticsDashboard = ({navigation}) => {
@@ -34,8 +38,8 @@ const AnalyticsDashboard = ({navigation}) => {
   const {formatAmount} = useCurrency();
   const {theme, isDark} = useTheme();
 
-  const budgetController = new SupabaseBudgetController();
-  const categoryController = new SupabaseCategoryController();
+  const budgetController = new OfflineBudgetController();
+  const categoryController = new OfflineCategoryController();
 
   useEffect(() => {
     loadData();
@@ -315,6 +319,8 @@ const AnalyticsDashboard = ({navigation}) => {
     <View
       style={[styles.container, {backgroundColor: theme.colors.background}]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+            <OfflineBanner />
+      
 
       <SafeAreaView style={styles.safeArea}>
         <ScrollView

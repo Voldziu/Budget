@@ -26,6 +26,10 @@ import {useTheme} from '../utils/ThemeContext';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import ReceiptAnalysisModal from './components/ReceiptAnalysisModal';
 
+import { OfflineTransactionController } from '../controllers/OfflineTransactionController';
+import { OfflineCategoryController } from '../controllers/OfflineCategoryController';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+
 const {width} = Dimensions.get('window');
 
 // Constant for API URL
@@ -111,9 +115,14 @@ const AddTransactionScreen = ({route, navigation}) => {
   const [analysisResults, setAnalysisResults] = useState([]);
   const [storeName, setStoreName] = useState('');
 
+    const { isOnline } = useNetworkStatus();
+
+
   // Controllers
-  const categoryController = new SupabaseCategoryController();
-  const transactionController = new SupabaseTransactionController();
+  // const categoryController = new SupabaseCategoryController();
+  // const transactionController = new SupabaseTransactionController();
+  const categoryController = new OfflineCategoryController();
+  const transactionController = new OfflineTransactionController();
 
   // Load data on component mount
   useEffect(() => {
@@ -243,6 +252,13 @@ const AddTransactionScreen = ({route, navigation}) => {
   };
 
   const handleAnalyzeReceipt = async () => {
+    if (!isOnline) {
+      Alert.alert(
+        'Offline Mode', 
+        'Receipt analysis requires internet connection. Please try again when you\'re online.'
+      );
+      return;
+    }
     if (!receiptImage) return;
 
     setIsAnalyzingReceipt(true);
@@ -333,13 +349,6 @@ const AddTransactionScreen = ({route, navigation}) => {
     setIsSaving(true);
 
     try {
-      const parsedAmount = Math.round(parseFloat(formattedAmount) * 100) / 100;
-      const categoryId = is_income
-        ? categories.find(c => c.name === 'Income')?.id
-        : selectedCategory;
-
-      if (!categoryId) throw new Error('Could not find appropriate category');
-
       const transactionData = {
         amount: parsedAmount,
         description,
@@ -350,14 +359,6 @@ const AddTransactionScreen = ({route, navigation}) => {
         parent_id: null,
       };
 
-      if (recurring) {
-        transactionData.recurring = true;
-        transactionData.frequency = frequency;
-        if (frequency === 'custom') {
-          transactionData.customFrequency = customFrequency;
-        }
-      }
-
       if (editTransaction) {
         await transactionController.updateTransaction(
           editTransaction.id,
@@ -365,6 +366,14 @@ const AddTransactionScreen = ({route, navigation}) => {
         );
       } else {
         await transactionController.addTransaction(transactionData);
+      }
+
+      // Show different messages for offline
+      if (!isOnline) {
+        Alert.alert(
+          'Saved Offline', 
+          'Transaction saved locally. It will sync when you\'re back online.'
+        );
       }
 
       navigation.goBack();
@@ -431,7 +440,16 @@ const AddTransactionScreen = ({route, navigation}) => {
   return (
     <View
       style={[styles.container, {backgroundColor: theme.colors.background}]}>
+        {!isOnline && (
+        <View style={styles.offlineHeader}>
+          <Icon name="wifi-off" size={16} color={theme.colors.warning} />
+          <Text style={[styles.offlineText, {color: theme.colors.warning}]}>
+            Working offline
+          </Text>
+        </View>
+      )}
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <OfflineBanner />
 
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
@@ -1203,6 +1221,11 @@ const AddTransactionScreen = ({route, navigation}) => {
         receiptImage={receiptImage}
         storeName={storeName}
       />
+    {!isOnline && receiptImage && (
+        <Text style={styles.offlineWarning}>
+          Receipt analysis disabled in offline mode
+        </Text>
+      )}
     </View>
   );
 };

@@ -17,6 +17,8 @@ import {SupabaseCategoryController} from '../controllers/SupabaseCategoryControl
 import Icon from 'react-native-vector-icons/Feather';
 import {useCurrency} from '../utils/CurrencyContext';
 import {useTheme} from '../utils/ThemeContext';
+import {OfflineTransactionController} from '../controllers/OfflineTransactionController';
+import {OfflineCategoryController} from '../controllers/OfflineCategoryController';
 
 const TransactionDetailScreen = ({route, navigation}) => {
   const {id} = route.params;
@@ -27,8 +29,8 @@ const TransactionDetailScreen = ({route, navigation}) => {
   const {formatAmount} = useCurrency();
   const {theme, isDark} = useTheme();
 
-  const transactionController = new SupabaseTransactionController();
-  const categoryController = new SupabaseCategoryController();
+  const transactionController = new OfflineTransactionController();
+  const categoryController = new OfflineCategoryController();
 
   useEffect(() => {
     loadTransaction();
@@ -149,6 +151,8 @@ const TransactionDetailScreen = ({route, navigation}) => {
       <View
         style={[styles.container, {backgroundColor: theme.colors.background}]}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+              <OfflineBanner />
+        
         <SafeAreaView style={styles.centerContainer}>
           <LinearGradient
             colors={
