@@ -320,70 +320,166 @@ const AddTransactionScreen = ({route, navigation}) => {
     }
   };
 
-  const handleSave = async () => {
-    if (editTransaction && editTransaction.is_parent) {
-      navigation.goBack();
-      return;
+  // const handleSave = async () => {
+  //   if (editTransaction && editTransaction.is_parent) {
+  //     navigation.goBack();
+  //     return;
+  //   }
+
+  //   let formattedAmount = amount.replace(',', '.');
+
+  //   if (
+  //     !formattedAmount ||
+  //     isNaN(parseFloat(formattedAmount)) ||
+  //     parseFloat(formattedAmount) <= 0
+  //   ) {
+  //     Alert.alert('Error', 'Please enter a valid amount');
+  //     return;
+  //   }
+
+  //   if (!description.trim()) {
+  //     Alert.alert('Error', 'Please enter a description');
+  //     return;
+  //   }
+
+  //   if (!is_income && !selectedCategory) {
+  //     Alert.alert('Error', 'Please select a category');
+  //     return;
+  //   }
+
+  //   setIsSaving(true);
+
+  //   try {
+  //     const transactionData = {
+  //       amount: parsedAmount,
+  //       description,
+  //       category: categoryId,
+  //       is_income: is_income,
+  //       date: new Date().toISOString(),
+  //       is_parent: false,
+  //       parent_id: null,
+  //     };
+
+  //     if (editTransaction) {
+  //       await transactionController.updateTransaction(
+  //         editTransaction.id,
+  //         transactionData,
+  //       );
+  //     } else {
+  //       await transactionController.addTransaction(transactionData);
+  //     }
+
+  //     // Show different messages for offline
+  //     if (!isOnline) {
+  //       Alert.alert(
+  //         'Saved Offline', 
+  //         'Transaction saved locally. It will sync when you\'re back online.'
+  //       );
+  //     }
+
+  //     navigation.goBack();
+  //   } catch (error) {
+  //     Alert.alert('Error', 'Failed to save transaction.');
+  //   } finally {
+  //     setIsSaving(false);
+  //   }
+  // };
+
+  // Zamień funkcję handleSave w AddTransactionScreen.js na tę poprawioną:
+
+// 🚨 ZAMIEŃ CAŁĄ FUNKCJĘ handleSave w AddTransactionScreen.js na tę:
+
+const handleSave = async () => {
+  console.log('🔄 handleSave started');
+  
+  if (editTransaction && editTransaction.is_parent) {
+    navigation.goBack();
+    return;
+  }
+
+  let formattedAmount = amount.replace(',', '.');
+  console.log('💰 Original amount:', amount, '-> Formatted:', formattedAmount);
+
+  // Validation
+  if (
+    !formattedAmount ||
+    isNaN(parseFloat(formattedAmount)) ||
+    parseFloat(formattedAmount) <= 0
+  ) {
+    Alert.alert('Error', 'Please enter a valid amount');
+    return;
+  }
+
+  if (!description.trim()) {
+    Alert.alert('Error', 'Please enter a description');
+    return;
+  }
+
+  if (!is_income && !selectedCategory) {
+    Alert.alert('Error', 'Please select a category');
+    return;
+  }
+
+  setIsSaving(true);
+
+  try {
+    // 🚨 POPRAWIONE: Używamy prawidłowych zmiennych
+    const parsedAmount = parseFloat(formattedAmount); // ✅ Teraz parsedAmount istnieje
+    
+    const transactionData = {
+      amount: parsedAmount,           // ✅ Używamy lokalnej zmiennej parsedAmount
+      description: description.trim(),
+      category: selectedCategory,     // ✅ Używamy selectedCategory zamiast categoryId
+      is_income: is_income,
+      date: new Date().toISOString(),
+      is_parent: false,
+      parent_id: null,
+    };
+
+    console.log('📤 Transaction data to save:', transactionData);
+
+    if (editTransaction) {
+      console.log('✏️ Updating existing transaction:', editTransaction.id);
+      await transactionController.updateTransaction(
+        editTransaction.id,
+        transactionData,
+      );
+      console.log('✅ Transaction updated successfully');
+    } else {
+      console.log('➕ Adding new transaction');
+      const result = await transactionController.addTransaction(transactionData);
+      console.log('✅ Transaction added successfully:', result);
     }
 
-    let formattedAmount = amount.replace(',', '.');
-
-    if (
-      !formattedAmount ||
-      isNaN(parseFloat(formattedAmount)) ||
-      parseFloat(formattedAmount) <= 0
-    ) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
+    // Show success message
+    if (!isOnline) {
+      Alert.alert(
+        'Saved Offline', 
+        'Transaction saved locally. It will sync when you\'re back online.'
+      );
+    } else {
+      Alert.alert(
+        'Success', 
+        `Transaction ${editTransaction ? 'updated' : 'saved'} successfully!`
+      );
     }
 
-    if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a description');
-      return;
-    }
-
-    if (!is_income && !selectedCategory) {
-      Alert.alert('Error', 'Please select a category');
-      return;
-    }
-
-    setIsSaving(true);
-
-    try {
-      const transactionData = {
-        amount: parsedAmount,
-        description,
-        category: categoryId,
-        is_income: is_income,
-        date: new Date().toISOString(),
-        is_parent: false,
-        parent_id: null,
-      };
-
-      if (editTransaction) {
-        await transactionController.updateTransaction(
-          editTransaction.id,
-          transactionData,
-        );
-      } else {
-        await transactionController.addTransaction(transactionData);
-      }
-
-      // Show different messages for offline
-      if (!isOnline) {
-        Alert.alert(
-          'Saved Offline', 
-          'Transaction saved locally. It will sync when you\'re back online.'
-        );
-      }
-
-      navigation.goBack();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to save transaction.');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    console.log('✅ Navigating back');
+    navigation.goBack();
+    
+  } catch (error) {
+    console.error('❌ Error saving transaction:', error);
+    console.error('❌ Error details:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    
+    Alert.alert(
+      'Error', 
+      `Failed to save transaction: ${error.message || 'Unknown error'}`
+    );
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const handleDeleteCategory = async categoryId => {
     try {

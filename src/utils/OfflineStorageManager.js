@@ -1,21 +1,28 @@
-// 1. Offline Storage Manager
-// src/utils/OfflineStorageManager.js
+// src/utils/OfflineStorageManager.js - POPRAWIONA WERSJA
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 
 export class OfflineStorageManager {
   static KEYS = {
     TRANSACTIONS: 'offline_transactions',
-    CATEGORIES: 'offline_categories',
+    CATEGORIES: 'offline_categories', 
     BUDGET: 'offline_budget',
+    CURRENT_BUDGET: 'offline_current_budget',
+    BUDGETS: 'offline_budgets',
+    SPENDING_SUMMARY: 'offline_spending_summary',
     PENDING_SYNC: 'pending_sync_operations',
     LAST_SYNC: 'last_sync_timestamp'
   };
 
   // Check if device is online
   static async isOnline() {
-    const netInfo = await NetInfo.fetch();
-    return netInfo.isConnected && netInfo.isInternetReachable;
+    try {
+      const netInfo = await NetInfo.fetch();
+      return netInfo.isConnected && netInfo.isInternetReachable;
+    } catch (error) {
+      console.error('Error checking online status:', error);
+      return false;
+    }
   }
 
   // Cache data locally
@@ -25,6 +32,7 @@ export class OfflineStorageManager {
         data,
         timestamp: Date.now()
       }));
+      console.log(`Cached data for key: ${key}`);
     } catch (error) {
       console.error('Error caching data:', error);
     }
@@ -34,15 +42,28 @@ export class OfflineStorageManager {
   static async getCachedData(key, maxAge = 24 * 60 * 60 * 1000) { // 24h default
     try {
       const cached = await AsyncStorage.getItem(key);
-      if (!cached) return null;
+      if (!cached) {
+        console.log(`No cached data for key: ${key}`);
+        return null;
+      }
 
-      const { data, timestamp } = JSON.parse(cached);
+      const parsed = JSON.parse(cached);
+      
+      // Handle old format (direct data without timestamp)
+      if (!parsed.timestamp) {
+        console.log(`Found old format cache for key: ${key}, returning data`);
+        return parsed;
+      }
+      
+      const { data, timestamp } = parsed;
       
       // Check if data is still fresh
       if (Date.now() - timestamp > maxAge) {
+        console.log(`Cache expired for key: ${key}`);
         return null;
       }
       
+      console.log(`Retrieved cached data for key: ${key}`);
       return data;
     } catch (error) {
       console.error('Error getting cached data:', error);
@@ -50,20 +71,45 @@ export class OfflineStorageManager {
     }
   }
 
+  // Clear specific cached data
+  static async clearCachedData(key) {
+    try {
+      await AsyncStorage.removeItem(key);
+      console.log(`Cleared cache for key: ${key}`);
+    } catch (error) {
+      console.error('Error clearing cached data:', error);
+    }
+  }
+
+  // Get all cache keys
+  static async getAllCacheKeys() {
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      return allKeys.filter(key => key.startsWith('offline_'));
+    } catch (error) {
+      console.error('Error getting cache keys:', error);
+      return [];
+    }
+  }
+
   // Add operation to pending sync queue
   static async addPendingOperation(operation) {
     try {
       const pending = await this.getPendingOperations();
-      pending.push({
+      const newOperation = {
         ...operation,
         id: Date.now().toString(),
         timestamp: Date.now()
-      });
+      };
+      
+      pending.push(newOperation);
       
       await AsyncStorage.setItem(
         this.KEYS.PENDING_SYNC, 
         JSON.stringify(pending)
       );
+      
+      console.log('Added pending operation:', newOperation.type);
     } catch (error) {
       console.error('Error adding pending operation:', error);
     }
@@ -80,6 +126,19 @@ export class OfflineStorageManager {
     }
   }
 
+  // Set pending operations (for filtering after sync)
+  static async setPendingOperations(operations) {
+    try {
+      await AsyncStorage.setItem(
+        this.KEYS.PENDING_SYNC, 
+        JSON.stringify(operations)
+      );
+      console.log(`Updated pending operations count: ${operations.length}`);
+    } catch (error) {
+      console.error('Error setting pending operations:', error);
+    }
+  }
+
   // Clear pending operations after successful sync
   static async clearPendingOperations() {
     try {
@@ -88,8 +147,50 @@ export class OfflineStorageManager {
         this.KEYS.LAST_SYNC, 
         JSON.stringify(Date.now())
       );
+      console.log('Cleared all pending operations');
     } catch (error) {
       console.error('Error clearing pending operations:', error);
+    }
+  }
+
+  // Get last sync timestamp
+  static async getLastSyncTime() {
+    try {
+      const lastSync = await AsyncStorage.getItem(this.KEYS.LAST_SYNC);
+      return lastSync ? JSON.parse(lastSync) : null;
+    } catch (error) {
+      console.error('Error getting last sync time:', error);
+      return null;
+    }
+  }
+
+  // Clear all offline data
+  static async clearAllData() {
+    try {
+      const keys = Object.values(this.KEYS);
+      await AsyncStorage.multiRemove(keys);
+      console.log('Cleared all offline data');
+    } catch (error) {
+      console.error('Error clearing all data:', error);
+    }
+  }
+
+  // Debug method to log all stored data
+  static async debugLogAllData() {
+    try {
+      const allKeys = await AsyncStorage.getAllKeys();
+      const offlineKeys = allKeys.filter(key => key.includes('offline') || key.includes('pending'));
+      
+      console.log('=== OFFLINE STORAGE DEBUG ===');
+      console.log('Offline keys found:', offlineKeys);
+      
+      for (const key of offlineKeys) {
+        const data = await AsyncStorage.getItem(key);
+        console.log(`${key}:`, data ? JSON.parse(data) : 'null');
+      }
+      console.log('=== END DEBUG ===');
+    } catch (error) {
+      console.error('Error in debug log:', error);
     }
   }
 }
