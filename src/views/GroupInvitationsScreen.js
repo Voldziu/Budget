@@ -26,8 +26,9 @@ const GroupInvitationsScreen = ({ navigation }) => {
   }, []);
 
   const loadInvitations = async () => {
+    console.log('Loading invitations...');
+    setLoading(true);
     try {
-      console.log('Loading invitations...');
       const invitations = await groupController.getMyInvitations();
       console.log('Loaded invitations:', invitations);
       setMyInvitations(invitations);
@@ -37,6 +38,7 @@ const GroupInvitationsScreen = ({ navigation }) => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      console.log('Loading complete.');
     }
   };
 
