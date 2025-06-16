@@ -148,7 +148,21 @@ const HomeScreen = ({navigation}) => {
           currentYear,
           null // Personal budget
         );
-        transactions = await transactionController.getAllTransactions();
+        
+        // Użyj getTransactionsByDateRange z group_id = null lub 'personal'
+        const startDate = new Date(currentYear, currentMonth, 1);
+        const endDate = new Date(currentYear, currentMonth + 1, 0);
+        transactions = await transactionController.getTransactionsByDateRange(
+          startDate.toISOString(),
+          endDate.toISOString(),
+          null // lub 'personal' - Personal budget (group_id = null)
+        );
+        
+        console.log('Personal data loaded:', {
+          transactionCount: transactions?.length || 0,
+          totalIncome: spendingSummary?.totalIncome || 0,
+          totalExpenses: spendingSummary?.totalExpenses || 0
+        });
         
       } else {
         console.log('Loading GROUP budget data for group:', group.id);
