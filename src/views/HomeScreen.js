@@ -87,14 +87,6 @@ const HomeScreen = ({navigation}) => {
     return unsubscribe;
   }, [navigation]);
 
-  // Add new useEffect to handle group changes
-  useEffect(() => {
-    if (selectedGroup && !loading) {
-      console.log('Group changed, reloading data for:', selectedGroup.name);
-      loadData();
-    }
-  }, [selectedGroup]);
-
   // Add debug effect
   useEffect(() => {
     console.log('HomeScreen: selectedGroup changed to:', selectedGroup);
@@ -104,8 +96,16 @@ const HomeScreen = ({navigation}) => {
   const handleGroupChange = async (group) => {
     console.log('HomeScreen: Switching to group:', group);
     
-    // Najpierw ustaw loading
-    setLoading(true);
+    if (!group) {
+      console.log('No group provided to handleGroupChange');
+      return;
+    }
+    
+    // Sprawdź czy grupa się faktycznie zmieniła
+    if (selectedGroup && selectedGroup.id === group.id) {
+      console.log('Same group selected, skipping reload');
+      return;
+    }
     
     // Ustaw nową grupę
     setSelectedGroup(group);
@@ -201,6 +201,14 @@ const HomeScreen = ({navigation}) => {
       setExpandedParents({});
       setChildTransactions({});
 
+      console.log('=== FINAL DATA SET ===');
+      console.log('Summary set:', {
+        totalIncome: spendingSummary?.totalIncome,
+        totalExpenses: spendingSummary?.totalExpenses,  
+        balance: spendingSummary?.balance,
+        groupId: groupIdForQuery
+      });
+
     } catch (error) {
       console.error('Error loading data for group:', error);
       
@@ -274,11 +282,6 @@ const HomeScreen = ({navigation}) => {
         icon: 'help-circle',
       }
     );
-  };
-
-  const getCurrentBalance = () => {
-    if (!summary) return 0;
-    return (summary.totalIncome || 0) - (summary.totalExpenses || 0);
   };
 
   const getGreeting = () => {
@@ -371,7 +374,7 @@ const HomeScreen = ({navigation}) => {
 
   // Gradient colors for balance card
   const getBalanceGradientColors = () => {
-    const balance = getCurrentBalance();
+    const balance = summary?.balance || 0;
     const isPositive = balance >= 0;
 
     if (isDark) {
@@ -412,7 +415,7 @@ const HomeScreen = ({navigation}) => {
     );
   }
 
-  const balance = getCurrentBalance();
+  const balance = summary?.balance || 0;
   const isPositive = balance >= 0;
 
   return (
