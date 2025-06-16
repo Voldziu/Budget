@@ -194,4 +194,39 @@ export class OfflineStorageManager {
       console.error('Error in debug log:', error);
     }
   }
+
+  // NOWE METODY - z uwzględnieniem groupId
+  static getTransactionsKey(groupId = null) {
+    const groupKey = groupId === null ? 'personal' : groupId;
+    return `${this.KEYS.TRANSACTIONS}_${groupKey}`;
+  }
+
+  static getSpendingSummaryKey(month, year, groupId = null) {
+    const groupKey = groupId === null ? 'personal' : groupId;
+    return `${this.KEYS.SPENDING_SUMMARY}_${month}_${year}_${groupKey}`;
+  }
+
+  static getBudgetKey(groupId = null) {
+    const groupKey = groupId === null ? 'personal' : groupId;
+    return `${this.KEYS.CURRENT_BUDGET}_${groupKey}`;
+  }
+
+  // Metoda do czyszczenia cache dla konkretnej grupy
+  static async clearGroupCache(groupId = null) {
+    try {
+      const groupKey = groupId === null ? 'personal' : groupId;
+      console.log(`Clearing cache for group: ${groupKey}`);
+      
+      const allKeys = await this.getAllCacheKeys();
+      const groupKeysToRemove = allKeys.filter(key => key.includes(`_${groupKey}`));
+      
+      for (const key of groupKeysToRemove) {
+        await this.clearCachedData(key);
+      }
+      
+      console.log(`Cleared ${groupKeysToRemove.length} cache keys for group ${groupKey}`);
+    } catch (error) {
+      console.error('Error clearing group cache:', error);
+    }
+  }
 }

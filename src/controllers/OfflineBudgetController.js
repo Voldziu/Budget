@@ -45,66 +45,66 @@ export class OfflineBudgetController extends SupabaseBudgetController {
   }
 
   // Get current budget with offline support
-  async getCurrentBudget() {
-    console.log('getCurrentBudget called');
+  async getCurrentBudget(groupId = null) {
+    console.log('getCurrentBudget called for group:', groupId);
     
     const isOnline = await OfflineStorageManager.isOnline();
-    console.log('Online status for budget:', isOnline);
+    const cacheKey = OfflineStorageManager.getBudgetKey(groupId);
     
     if (isOnline) {
       try {
         console.log('Attempting to fetch current budget from server...');
-        const budget = await super.getCurrentBudget();
+        // Wywołaj odpowiednią metodę w zależności od groupId
+        const budget = groupId 
+          ? await super.getGroupBudget(groupId, new Date().getMonth(), new Date().getFullYear())
+          : await super.getCurrentBudget();
+        
         console.log('Server returned budget:', budget);
         
-        // Cache the budget
+        // Cache the budget z kluczem uwzględniającym groupId
         if (budget) {
-          await OfflineStorageManager.cacheData(
-            OfflineStorageManager.KEYS.CURRENT_BUDGET, 
-            budget
-          );
+          await OfflineStorageManager.cacheData(cacheKey, budget);
         }
         
         return budget;
       } catch (error) {
         console.error('Online budget fetch failed, falling back to cache:', error);
-        return await this.getCachedCurrentBudget();
+        return await this.getCachedCurrentBudget(groupId);
       }
     } else {
       console.log('Working offline, using cached budget');
-      return await this.getCachedCurrentBudget();
+      return await this.getCachedCurrentBudget(groupId);
     }
   }
 
-  async getCachedCurrentBudget() {
+  async getCachedCurrentBudget(groupId = null) {
+    const cacheKey = OfflineStorageManager.getBudgetKey(groupId);
+    
     try {
-      const cached = await OfflineStorageManager.getCachedData(
-        OfflineStorageManager.KEYS.CURRENT_BUDGET
-      );
+      const cached = await OfflineStorageManager.getCachedData(cacheKey);
       
       if (cached) {
-        console.log('Retrieved cached current budget:', cached);
+        console.log(`Retrieved cached budget for group ${groupId}:`, cached);
         return cached;
       }
       
-      console.log('No cached budget found, creating default');
-      // Return default budget
-      const defaultBudget = { 
-        amount: 2000, 
-        month: new Date().getMonth(), 
-        year: new Date().getFullYear() 
+      console.log(`No cached budget found for group ${groupId}, returning default`);
+      const date = new Date();
+      return {
+        month: date.getMonth(),
+        year: date.getFullYear(),
+        amount: 0,
+        group_id: groupId
       };
-      
-      // Cache the default
-      await OfflineStorageManager.cacheData(
-        OfflineStorageManager.KEYS.CURRENT_BUDGET,
-        defaultBudget
-      );
-      
-      return defaultBudget;
     } catch (error) {
       console.error('Error getting cached budget:', error);
-      return { amount: 2000, month: new Date().getMonth(), year: new Date().getFullYear() };
+      const date = new Date();
+      return { 
+        month: date.getMonth(), 
+        year: date.getFullYear(), 
+        amount: 0,
+        group_id: groupId 
+      };
     }
   }
 
@@ -170,121 +170,103 @@ export class OfflineBudgetController extends SupabaseBudgetController {
   }
 
   // Get spending summary with offline support
-  async getSpendingSummary(month, year) {
-    console.log(`getSpendingSummary called for ${month}/${year}`);
+  async getSpendingSummary(month, year, groupId = null) {
+    console.log(`OfflineBudgetController.getSpendingSummary called for ${month}/${year}, groupId: ${groupId}`);
     
     const isOnline = await OfflineStorageManager.isOnline();
-    const cacheKey = `${OfflineStorageManager.KEYS.SPENDING_SUMMARY}_${month}_${year}`;
+    const cacheKey = OfflineStorageManager.getSpendingSummaryKey(month, year, groupId);
     
     if (isOnline) {
       try {
         console.log('Attempting to generate spending summary from server...');
-        // Generate summary using parent method
-        const summary = await super.getSpendingSummary(month, year);
+        // Wywołaj parent method z groupId
+        const summary = await super.getSpendingSummary(month, year, groupId);
         console.log('Server generated summary:', summary);
         
-        // Cache the summary
+        // Cache the summary z kluczem uwzględniającym groupId
         await OfflineStorageManager.cacheData(cacheKey, summary);
         
         return summary;
       } catch (error) {
         console.error('Online summary generation failed, falling back to cache:', error);
-        return await this.getCachedSpendingSummary(month, year);
+        return await this.getCachedSpendingSummary(month, year, groupId);
       }
     } else {
       console.log('Working offline, generating summary from cached data');
-      return await this.getCachedSpendingSummary(month, year);
+      return await this.getCachedSpendingSummary(month, year, groupId);
     }
   }
 
-  async getCachedSpendingSummary(month, year) {
-    const cacheKey = `${OfflineStorageManager.KEYS.SPENDING_SUMMARY}_${month}_${year}`;
+  async getCachedSpendingSummary(month, year, groupId = null) {
+    const cacheKey = OfflineStorageManager.getSpendingSummaryKey(month, year, groupId);
     
     try {
       const cached = await OfflineStorageManager.getCachedData(cacheKey);
       
       if (cached) {
-        console.log('Retrieved cached spending summary:', cached);
+        console.log(`Retrieved cached spending summary for group ${groupId}:`, cached);
         return cached;
       }
       
-      console.log('No cached summary found, generating from cached data');
-      // Generate summary from cached data if available
-      return await this.generateOfflineSpendingSummary(month, year);
+      console.log(`No cached summary found for group ${groupId}, generating from cached data`);
+      // Generate summary from cached transactions if available
+      return await this.generateSummaryFromCachedData(month, year, groupId);
     } catch (error) {
       console.error('Error getting cached spending summary:', error);
       return this.getEmptySpendingSummary();
     }
   }
 
-  async generateOfflineSpendingSummary(month, year) {
+  async generateSummaryFromCachedData(month, year, groupId = null) {
     try {
-      console.log(`Generating offline spending summary for ${month}/${year}`);
+      const transactionCacheKey = OfflineStorageManager.getTransactionsKey(groupId);
+      const cachedTransactions = await OfflineStorageManager.getCachedData(transactionCacheKey);
       
-      // Get cached transactions
-      const cachedTransactions = await OfflineStorageManager.getCachedData(
-        OfflineStorageManager.KEYS.TRANSACTIONS
-      ) || [];
-      
-      // Get cached categories
-      const cachedCategories = await OfflineStorageManager.getCachedData(
-        OfflineStorageManager.KEYS.CATEGORIES
-      ) || [];
-      
-      console.log(`Found ${cachedTransactions.length} cached transactions`);
-      console.log(`Found ${cachedCategories.length} cached categories`);
-      
-      // Filter transactions for the given month
+      if (!cachedTransactions || !Array.isArray(cachedTransactions)) {
+        console.log('No cached transactions available for summary generation');
+        return this.getEmptySpendingSummary();
+      }
+
+      // Filter transactions by month/year
       const startDate = new Date(year, month, 1);
       const endDate = new Date(year, month + 1, 0);
       
       const monthTransactions = cachedTransactions.filter(t => {
-        const transactionDate = new Date(t.date || t.created_at);
+        const transactionDate = new Date(t.date);
         return transactionDate >= startDate && transactionDate <= endDate;
       });
-      
-      console.log(`Found ${monthTransactions.length} transactions for the month`);
-      
+
+      console.log(`Generating summary from ${monthTransactions.length} cached transactions`);
+
       // Calculate totals
       const totalIncome = monthTransactions
         .filter(t => t.is_income === true)
-        .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
         
       const totalExpenses = monthTransactions
-        .filter(t => t.is_income === false)
-        .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-      
-      console.log(`Calculated income: ${totalIncome}, expenses: ${totalExpenses}`);
-      
-      // Calculate spending by category
-      const spendingByCategory = cachedCategories.map(category => {
-        const categoryTransactions = monthTransactions.filter(
-          t => t.category === category.id && t.is_income === false
-        );
-        
-        const spent = categoryTransactions.reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
-        const remaining = (category.budget || 0) - spent;
-        const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
-        
-        return {
-          category,
-          spent,
-          remaining: remaining > 0 ? remaining : 0,
-          percentage: percentage > 100 ? 100 : percentage,
-        };
-      });
-      
+        .filter(t => t.is_income === false && !t.is_parent)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+
       const summary = {
         totalIncome,
         totalExpenses,
         balance: totalIncome - totalExpenses,
-        spendingByCategory,
+        monthlyBudget: 0, // TODO: Get from budget cache
+        totalBudget: totalIncome,
+        spendingByCategory: [], // TODO: Calculate categories
+        budgetPercentage: totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0
       };
-      
-      console.log('Generated offline summary:', summary);
+
+      console.log('Generated summary from cached data:', summary);
       return summary;
     } catch (error) {
-      console.error('Error generating offline spending summary:', error);
+      console.error('Error generating summary from cached data:', error);
       return this.getEmptySpendingSummary();
     }
   }
@@ -295,6 +277,9 @@ export class OfflineBudgetController extends SupabaseBudgetController {
       totalExpenses: 0,
       balance: 0,
       spendingByCategory: [],
+      monthlyBudget: 0,
+      totalBudget: 0,
+      budgetPercentage: 0
     };
   }
 

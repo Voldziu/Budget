@@ -12,6 +12,7 @@ import {
   StatusBar,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SupabaseBudgetController} from '../controllers/SupabaseBudgetController';
 import {SupabaseTransactionController} from '../controllers/SupabaseTransactionController';
 import {SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
@@ -42,9 +43,10 @@ const HomeScreen = ({navigation}) => {
   const [childTransactions, setChildTransactions] = useState({});
   const [loadingChildren, setLoadingChildren] = useState({});
 
-  const budgetController = new SupabaseBudgetController();
-  const transactionController = new SupabaseTransactionController();
-  const categoryController = new SupabaseCategoryController();
+  // BEZPOŚREDNIE KONTROLERY - BEZ CACHE!
+  const [budgetController] = useState(() => new SupabaseBudgetController());
+  const [transactionController] = useState(() => new SupabaseTransactionController());
+  const [categoryController] = useState(() => new SupabaseCategoryController());
 
   const [syncStatus, setSyncStatus] = useState(null); // 'syncing', 'success', 'error'
   const { isOnline, isConnecting } = useNetworkStatus();
@@ -54,27 +56,83 @@ const HomeScreen = ({navigation}) => {
 
   // Load initial data and set up navigation listener
   useEffect(() => {
-    const loadInitialData = async () => {
+    const migrateCacheToGroupAware = async () => {
       try {
-        // Zawsze rozpocznij od Personal Budget
-        const defaultGroup = { 
-          id: 'personal', 
-          name: 'Personal Budget', 
-          isPersonal: true 
-        };
+        console.log('🔄 Migrating cache to group-aware system...');
         
-        setSelectedGroup(defaultGroup);
-        // Nie pobieraj z AsyncStorage
-        await loadDataForGroup(defaultGroup);
+        // Sprawdź czy już była migracja
+        const migrationFlag = await AsyncStorage.getItem('cache_migration_v2_completed');
+        if (migrationFlag) {
+          console.log('✅ Cache migration already completed');
+          return;
+        }
+
+        // Pobierz wszystkie klucze cache
+        const allKeys = await AsyncStorage.getAllKeys();
+        
+        // Znajdź stare klucze bez groupId
+        const oldTransactionKeys = allKeys.filter(key => 
+          key === 'offline_transactions' || 
+          key.startsWith('offline_transactions_') && !key.includes('_personal') && !key.includes('_group_')
+        );
+        
+        const oldSummaryKeys = allKeys.filter(key => 
+          key.startsWith('offline_spending_summary_') && 
+          !key.includes('_personal') && !key.includes('_group_')
+        );
+        
+        const oldBudgetKeys = allKeys.filter(key => 
+          key === 'offline_current_budget' && 
+          !key.includes('_personal') && !key.includes('_group_')
+        );
+
+        console.log(`Found ${oldTransactionKeys.length + oldSummaryKeys.length + oldBudgetKeys.length} old cache keys to migrate`);
+
+        // Usuń stare klucze (ponieważ nie wiemy do jakiej grupy należały)
+        const keysToRemove = [...oldTransactionKeys, ...oldSummaryKeys, ...oldBudgetKeys];
+        
+        if (keysToRemove.length > 0) {
+          await AsyncStorage.multiRemove(keysToRemove);
+          console.log(`🗑️ Removed ${keysToRemove.length} old cache keys:`, keysToRemove);
+        }
+
+        // Oznacz migrację jako ukończoną
+        await AsyncStorage.setItem('cache_migration_v2_completed', 'true');
+        
+        console.log('✅ Cache migration completed - fresh start with group-aware cache');
+        
+        // Opcjonalnie: pokaż użytkownikowi że cache został wyczyszczony
+        // Alert.alert('Cache Updated', 'Data cache has been updated for better group support');
+        
       } catch (error) {
-        console.error('Error loading initial data:', error);
+        console.error('❌ Error during cache migration:', error);
       }
     };
 
-    loadInitialData();
-    
+    // Uruchom migrację przed załadowaniem danych
+    migrateCacheToGroupAware().then(() => {
+      // Załaduj dane dopiero po migracji
+      const loadInitialData = async () => {
+        try {
+          const defaultGroup = { 
+            id: 'personal', 
+            name: 'Personal Budget', 
+            isPersonal: true 
+          };
+          
+          setSelectedGroup(defaultGroup);
+          await loadDataForGroup(defaultGroup);
+        } catch (error) {
+          console.error('Error loading initial data:', error);
+        }
+      };
+
+      loadInitialData();
+    });
+
+    // Reszta istniejącego useEffect...
     const unsubscribe = navigation.addListener('focus', () => {
-      // Przy powrocie na ekran też resetuj do Personal Budget
+      // Przy powrocie na ekran nie rób migracji ponownie
       const defaultGroup = { 
         id: 'personal', 
         name: 'Personal Budget', 
@@ -388,6 +446,40 @@ const HomeScreen = ({navigation}) => {
     }
   };
 
+  // Debug function to clear cache
+  const clearCache = async () => {
+    try {
+      await AsyncStorage.clear();
+      Alert.alert('Success', 'Cache cleared - restart app');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to clear cache');
+    }
+  };
+
+  // DODAJ metodę debug do sprawdzenia cache
+  const debugCache = async () => {
+    try {
+      console.log('=== CACHE DEBUG ===');
+      const allKeys = await AsyncStorage.getAllKeys();
+      const cacheKeys = allKeys.filter(key => key.startsWith('offline_'));
+      
+      console.log('All cache keys:', cacheKeys);
+      
+      for (const key of cacheKeys) {
+        const data = await AsyncStorage.getItem(key);
+        const parsed = JSON.parse(data);
+        console.log(`${key}:`, {
+          hasData: !!parsed?.data,
+          timestamp: new Date(parsed?.timestamp).toLocaleString(),
+          dataLength: Array.isArray(parsed?.data) ? parsed.data.length : 'not array'
+        });
+      }
+      console.log('=== END CACHE DEBUG ===');
+    } catch (error) {
+      console.error('Cache debug error:', error);
+    }
+  };
+
   if (loading) {
     return (
       <View
@@ -452,6 +544,13 @@ const HomeScreen = ({navigation}) => {
                   selectedGroup={selectedGroup}
                 />
               </View>
+
+              {/* Debug Cache Clear Button */}
+              <TouchableOpacity 
+                style={[styles.debugButton, { backgroundColor: theme.colors.error }]}
+                onPress={clearCache}>
+                <Text style={styles.debugButtonText}>Clear Cache (Debug)</Text>
+              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -813,6 +912,14 @@ const HomeScreen = ({navigation}) => {
           <View style={styles.bottomPadding} />
         </ScrollView>
       </SafeAreaView>
+
+      {/* Debug button */}
+      <TouchableOpacity 
+        onPress={debugCache}
+        style={styles.debugButton}
+      >
+        <Text style={styles.debugButtonText}>Debug Cache</Text>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -1097,6 +1204,21 @@ const styles = StyleSheet.create({
   // Bottom Padding
   bottomPadding: {
     height: 100,
+  },
+
+  // Debug button styles
+  debugButton: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    backgroundColor: '#666',
+    padding: 10,
+    borderRadius: 5,
+    opacity: 0.7
+  },
+  debugButtonText: {
+    color: 'white',
+    fontSize: 12
   },
 });
 
