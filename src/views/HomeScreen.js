@@ -139,74 +139,51 @@ const HomeScreen = ({navigation}) => {
       let spendingSummary;
       let transactions;
 
-      if (group.isPersonal || group.id === 'personal') {
-        console.log('Loading PERSONAL budget data (group_id = null)...');
-        
-        // Użyj getSpendingSummary z null jako group_id
-        spendingSummary = await budgetController.getSpendingSummary(
-          currentMonth,
-          currentYear,
-          null // Personal budget
-        );
-        
-        // Użyj getTransactionsByDateRange z group_id = null lub 'personal'
-        const startDate = new Date(currentYear, currentMonth, 1);
-        const endDate = new Date(currentYear, currentMonth + 1, 0);
-        transactions = await transactionController.getTransactionsByDateRange(
-          startDate.toISOString(),
-          endDate.toISOString(),
-          null // lub 'personal' - Personal budget (group_id = null)
-        );
-        
-        console.log('Personal data loaded:', {
-          transactionCount: transactions?.length || 0,
-          totalIncome: spendingSummary?.totalIncome || 0,
-          totalExpenses: spendingSummary?.totalExpenses || 0
-        });
-        
-      } else {
-        console.log('Loading GROUP budget data for group:', group.id);
-        try {
-          // Użyj getSpendingSummary z ID grupy
-          spendingSummary = await budgetController.getSpendingSummary(
-            currentMonth,
-            currentYear,
-            group.id // Group budget
-          );
-          transactions = await groupController.getGroupTransactions(group.id);
-          
-          console.log('Group data loaded:', {
-            transactionCount: transactions?.length || 0,
-            totalIncome: spendingSummary?.totalIncome || 0,
-            totalExpenses: spendingSummary?.totalExpenses || 0
-          });
-          
-          // Jeśli nie ma transakcji, ustaw puste wartości
-          if (!transactions || transactions.length === 0) {
-            transactions = [];
-            spendingSummary = {
-              totalIncome: 0,
-              totalExpenses: 0,
-              balance: 0,
-              spendingByCategory: [],
-              monthlyBudget: 0,
-              totalBudget: 0,
-              budgetPercentage: 0
-            };
-          }
-        } catch (error) {
-          console.error('Error loading group data:', error);
-          transactions = [];
-          spendingSummary = {
-            totalIncome: 0,
-            totalExpenses: 0,
-            balance: 0,
-            spendingByCategory: [],
-            monthlyBudget: 0,
-            totalBudget: 0,
-            budgetPercentage: 0
-          };
-        }
+      // Określ groupId dla wywołań
+      const groupIdForQuery = (group.isPersonal || group.id === 'personal') ? null : group.id;
+      
+      console.log('Using groupId for queries:', groupIdForQuery);
+
+      // Użyj unified metody getSpendingSummary
+      spendingSummary = await budgetController.getSpendingSummary(
+        currentMonth,
+        currentYear,
+        groupIdForQuery
+      );
+
+      // Pobierz transakcje dla danego zakresu dat i grupy
+      const startDate = new Date(currentYear, currentMonth, 1);
+      const endDate = new Date(currentYear, currentMonth + 1, 0);
+      
+      transactions = await transactionController.getTransactionsByDateRange(
+        startDate.toISOString(),
+        endDate.toISOString(),
+        groupIdForQuery
+      );
+
+      console.log('Data loaded:', {
+        groupId: groupIdForQuery,
+        transactionCount: transactions?.length || 0,
+        totalIncome: spendingSummary?.totalIncome || 0,
+        totalExpenses: spendingSummary?.totalExpenses || 0,
+        balance: spendingSummary?.balance || 0
+      });
+
+      // Jeśli nie ma danych, ustaw puste wartości
+      if (!spendingSummary) {
+        spendingSummary = {
+          totalIncome: 0,
+          totalExpenses: 0,
+          balance: 0,
+          spendingByCategory: [],
+          monthlyBudget: 0,
+          totalBudget: 0,
+          budgetPercentage: 0
+        };
+      }
+
+      if (!transactions || transactions.length === 0) {
+        transactions = [];
       }
 
       // Sortuj transakcje po dacie
@@ -226,6 +203,19 @@ const HomeScreen = ({navigation}) => {
 
     } catch (error) {
       console.error('Error loading data for group:', error);
+      
+      // W przypadku błędu ustaw puste wartości
+      setSummary({
+        totalIncome: 0,
+        totalExpenses: 0,
+        balance: 0,
+        spendingByCategory: [],
+        monthlyBudget: 0,
+        totalBudget: 0,
+        budgetPercentage: 0
+      });
+      setRecentTransactions([]);
+      
       if (isOnline) {
         Alert.alert('Error', 'Failed to load data. Please try again.');
       }

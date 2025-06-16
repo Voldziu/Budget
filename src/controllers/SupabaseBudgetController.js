@@ -11,107 +11,19 @@ export class SupabaseBudgetController {
   
   // Get spending summary with improved calculations and debugging
   // Updated to handle parent-child transactions
-  async getSpendingSummary(month, year) {
-    try {      
-      console.log(`Generating spending summary for ${month}/${year}`);
+  async getSpendingSummary(month, year, groupId = null) {
+    try {
+      console.log(`Generating spending summary for ${month}/${year}, groupId: ${groupId}`);
       
-      // Get all transactions for the given month
-      const startDate = new Date(year, month, 1);
-      const endDate = new Date(year, month + 1, 0);
-      
-      console.log('Date range:', startDate.toISOString(), 'to', endDate.toISOString());
-      
-      const transactions = await this.transactionController.getTransactionsByDateRange(
-        startDate, 
-        endDate, 
-        true, // includeChildren = true
-        groupId // NOWY PARAMETR
-      );
-      
-      const categories = await this.categoryController.getAllCategories();
-      
-      // Get the current budget amount
-      const currentBudget = await this.getCurrentBudget();
-      const budgetAmount = currentBudget?.amount || 0;
-      
-      console.log('Transactions for calculation:', transactions.length);
-      if (transactions.length > 0) {
-        console.log('Sample transaction:', transactions[0]);
+      // Jeśli groupId jest null lub 'personal' - użyj osobistej metody
+      if (!groupId || groupId === 'personal' || groupId === null) {
+        return await this.getPersonalSpendingSummary(month, year);
       }
       
-      // Debug transaction types
-      const parentCount = transactions.filter(t => t.is_parent === true).length;
-      const childCount = transactions.filter(t => t.parent_id !== null).length;
-      const regularCount = transactions.filter(t => !t.is_parent && t.parent_id === null).length;
-      
-      console.log(`Transaction breakdown: Parents: ${parentCount}, Children: ${childCount}, Regular: ${regularCount}`);
-      
-      // Debug income vs expense flags
-      const incomeCount = transactions.filter(t => t.is_income === true).length;
-      const expenseCount = transactions.filter(t => t.is_income === false).length;
-      console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
-      
-      // Calculate total income and expenses - fixed to respect is_income flag
-      // For expenses, EXCLUDE parent transactions to avoid double-counting
-      const totalIncome = transactions
-        .filter(t => t.is_income === true) // Only income transactions
-        .reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-        
-      const totalExpenses = transactions
-        .filter(t => t.is_income === false && !t.is_parent) // Exclude parent transactions for expense calculation
-        .reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-      
-      console.log('Calculated income:', totalIncome, 'expenses:', totalExpenses, 'budget:', budgetAmount);
-      
-      // Calculate spending by category
-      // Use child transactions (not parents) for proper category allocation
-      const spendingByCategory = categories.map(category => {
-        const categoryTransactions = transactions.filter(
-          t => t.category === category.id && t.is_income === false && !t.is_parent
-        );
-        
-        const spent = categoryTransactions.reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-        
-        const remaining = category.budget - spent;
-        const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
-        
-        console.log(`Category ${category.name}: spent ${spent} of ${category.budget} (${percentage.toFixed(1)}%)`);
-        
-        return {
-          category,
-          spent,
-          remaining: remaining > 0 ? remaining : 0,
-          percentage: percentage > 100 ? 100 : percentage,
-        };
-      });
-      
-      // Calculate the total budget (user-set budget + current month's income)
-      const totalBudget = budgetAmount + totalIncome;
-      
-      const summary = {
-        totalIncome,
-        totalExpenses,
-        balance: totalIncome - totalExpenses,
-        monthlyBudget: budgetAmount,
-        totalBudget: totalBudget,
-        spendingByCategory,
-        // Add percentages for overall budget progress
-        budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
-      };
-      
-      console.log('Final summary:', JSON.stringify(summary, null, 2));
-      return summary;
+      // W przeciwnym razie użyj metody grupowej
+      return await this.getGroupSpendingSummary(groupId, month, year);
     } catch (error) {
-      console.error('Error generating spending summary:', error);
+      console.error('Error in getSpendingSummary:', error);
       throw error;
     }
   }
@@ -241,10 +153,34 @@ export class SupabaseBudgetController {
     try {
       console.log(`Generating group spending summary for group ${groupId}, ${month}/${year}`);
       
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź członkostwo w grupie
+      const { data: membership, error: membershipError } = await supabase
+        .from('budget_group_members')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (membershipError || !membership) {
+        console.error('No access to group:', groupId);
+        return {
+          totalIncome: 0,
+          totalExpenses: 0,
+          balance: 0,
+          spendingByCategory: [],
+          monthlyBudget: 0,
+          totalBudget: 0,
+          budgetPercentage: 0
+        };
+      }
+
+      // Pobierz transakcje grupy z danego miesiąca
       const startDate = new Date(year, month, 1);
       const endDate = new Date(year, month + 1, 0);
       
-      // Pobierz transakcje grupy
       const { data: transactions, error } = await supabase
         .from(TABLES.TRANSACTIONS)
         .select('*')
@@ -267,7 +203,7 @@ export class SupabaseBudgetController {
       const budgetAmount = groupBudget?.amount || 0;
       const categories = await this.categoryController.getAllCategories();
 
-      // Calculate total income and expenses
+      // Oblicz dochody i wydatki
       const totalIncome = transactions
         .filter(t => t.is_income === true)
         .reduce((sum, t) => {
@@ -282,7 +218,7 @@ export class SupabaseBudgetController {
           return sum + amount;
         }, 0);
 
-      // Calculate spending by category
+      // Oblicz wydatki per kategoria
       const spendingByCategory = categories.map(category => {
         const categoryTransactions = transactions.filter(
           t => t.category === category.id && t.is_income === false && !t.is_parent
@@ -304,7 +240,6 @@ export class SupabaseBudgetController {
         };
       });
 
-      // Calculate the total budget (group budget + current month's income)
       const totalBudget = budgetAmount + totalIncome;
 
       const summary = {
