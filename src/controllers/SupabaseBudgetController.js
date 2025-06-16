@@ -237,72 +237,123 @@ export class SupabaseBudgetController {
   }
 
   // Dodaj do SupabaseBudgetController
-async getGroupSpendingSummary(groupId, month, year) {
-  try {
-    console.log(`Generating group spending summary for group ${groupId}, ${month}/${year}`);
-    
-    const startDate = new Date(year, month, 1);
-    const endDate = new Date(year, month + 1, 0);
-    
-    // Pobierz transakcje grupy
-    const { data: transactions, error } = await supabase
-      .from(TABLES.TRANSACTIONS)
-      .select('*')
-      .eq('group_id', groupId)
-      .gte('date', startDate.toISOString())
-      .lte('date', endDate.toISOString());
+  async getGroupSpendingSummary(groupId, month, year) {
+    try {
+      console.log(`Generating group spending summary for group ${groupId}, ${month}/${year}`);
+      
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0);
+      
+      // Pobierz transakcje grupy
+      const { data: transactions, error } = await supabase
+        .from(TABLES.TRANSACTIONS)
+        .select('*')
+        .eq('group_id', groupId)
+        .gte('date', startDate.toISOString())
+        .lte('date', endDate.toISOString());
 
-    if (error) throw error;
+      if (error) throw error;
 
-    // Pobierz budżet grupy
-    const { data: groupBudget } = await supabase
-      .from(TABLES.BUDGETS)
-      .select('*')
-      .eq('group_id', groupId)
-      .eq('month', month)
-      .eq('year', year)
-      .eq('is_group_budget', true)
-      .single();
+      // Pobierz budżet grupy
+      const { data: groupBudget } = await supabase
+        .from(TABLES.BUDGETS)
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('month', month)
+        .eq('year', year)
+        .eq('is_group_budget', true)
+        .single();
 
-    // Reszta logiki podobna do getSpendingSummary
-    // ale operuje na transakcjach grupy
-    
-    return summary;
-  } catch (error) {
-    console.error('Error generating group spending summary:', error);
-    throw error;
+      const budgetAmount = groupBudget?.amount || 0;
+      const categories = await this.categoryController.getAllCategories();
+
+      // Calculate total income and expenses
+      const totalIncome = transactions
+        .filter(t => t.is_income === true)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+        
+      const totalExpenses = transactions
+        .filter(t => t.is_income === false && !t.is_parent)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+
+      // Calculate spending by category
+      const spendingByCategory = categories.map(category => {
+        const categoryTransactions = transactions.filter(
+          t => t.category === category.id && t.is_income === false && !t.is_parent
+        );
+        
+        const spent = categoryTransactions.reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+        
+        const remaining = category.budget - spent;
+        const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
+        
+        return {
+          category,
+          spent,
+          remaining: remaining > 0 ? remaining : 0,
+          percentage: percentage > 100 ? 100 : percentage,
+        };
+      });
+
+      // Calculate the total budget (group budget + current month's income)
+      const totalBudget = budgetAmount + totalIncome;
+
+      const summary = {
+        totalIncome,
+        totalExpenses,
+        balance: totalIncome - totalExpenses,
+        monthlyBudget: budgetAmount,
+        totalBudget: totalBudget,
+        spendingByCategory,
+        budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
+      };
+
+      console.log('Generated group spending summary:', summary);
+      return summary;
+    } catch (error) {
+      console.error('Error generating group spending summary:', error);
+      throw error;
+    }
   }
-}
 
-async setGroupBudget(groupId, budget) {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
+  async setGroupBudget(groupId, budget) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
 
-    // Sprawdź czy użytkownik ma uprawnienia do grupy
-    const hasPermission = await this.checkGroupPermission(groupId, user.id, ['admin']);
-    if (!hasPermission) throw new Error('Insufficient permissions');
+      // Sprawdź czy użytkownik ma uprawnienia do grupy
+      const hasPermission = await this.checkGroupPermission(groupId, user.id, ['admin']);
+      if (!hasPermission) throw new Error('Insufficient permissions');
 
-    const budgetData = {
-      ...budget,
-      group_id: groupId,
-      is_group_budget: true,
-      user_id: user.id // kto ustawił budżet
-    };
+      const budgetData = {
+        ...budget,
+        group_id: groupId,
+        is_group_budget: true,
+        user_id: user.id // kto ustawił budżet
+      };
 
-    const { data, error } = await supabase
-      .from(TABLES.BUDGETS)
-      .upsert(budgetData, {
-        onConflict: 'group_id,month,year'
-      })
-      .select()
-      .single();
+      const { data, error } = await supabase
+        .from(TABLES.BUDGETS)
+        .upsert(budgetData, {
+          onConflict: 'group_id,month,year'
+        })
+        .select()
+        .single();
 
-    if (error) throw error;
-    return data;
-  } catch (error) {
-    console.error('Error setting group budget:', error);
-    throw error;
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error setting group budget:', error);
+      throw error;
+    }
   }
-}
 }

@@ -11,7 +11,8 @@ export class OfflineStorageManager {
     BUDGETS: 'offline_budgets',
     SPENDING_SUMMARY: 'offline_spending_summary',
     PENDING_SYNC: 'pending_sync_operations',
-    LAST_SYNC: 'last_sync_timestamp'
+    LAST_SYNC: 'last_sync_timestamp',
+    LAST_SELECTED_GROUP: 'last_selected_group'
   };
 
   // Check if device is online

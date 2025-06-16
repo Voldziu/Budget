@@ -14,15 +14,16 @@ import {
 import Icon from 'react-native-vector-icons/Feather';
 import { BudgetGroupController } from '../controllers/BudgetGroupController';
 import { useTheme } from '../utils/ThemeContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const BudgetGroupSelector = ({ onGroupChange, navigation }) => {
+export const BudgetGroupSelector = ({ onGroupChange, navigation, compact = false, selectedGroup }) => {
   const [groups, setGroups] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDescription, setNewGroupDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [pendingInvitations, setPendingInvitations] = useState([]);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const { theme } = useTheme();
   const groupController = new BudgetGroupController();
@@ -47,7 +48,6 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation }) => {
       
       // Set default selection if none selected
       if (!selectedGroup) {
-        setSelectedGroup(personalGroup);
         if (onGroupChange) {
           onGroupChange(personalGroup);
         }
@@ -69,10 +69,24 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation }) => {
     }
   };
 
-  const handleGroupSelect = (group) => {
-    setSelectedGroup(group);
-    if (onGroupChange) {
-      onGroupChange(group);
+  const handleGroupSelect = async (group) => {
+    try {
+      console.log('Selecting group:', group);
+      
+      // Save selected group to AsyncStorage
+      await AsyncStorage.setItem('last_selected_group', JSON.stringify(group));
+      
+      // Call onGroupChange with the selected group
+      if (onGroupChange) {
+        onGroupChange(group);
+      }
+      
+      setIsExpanded(false);
+      
+      console.log('Group selection completed:', group);
+    } catch (error) {
+      console.error('Error saving selected group:', error);
+      Alert.alert('Error', 'Failed to save group selection');
     }
   };
 
@@ -119,6 +133,70 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation }) => {
     );
   }
 
+  // Compact mode render
+  if (compact) {
+    return (
+      <View style={styles.compactContainer}>
+        <TouchableOpacity 
+          style={[styles.compactSelector, { 
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border + '30'
+          }]}
+          onPress={() => setIsExpanded(!isExpanded)}
+        >
+          <View style={styles.compactSelectedGroup}>
+            <Icon 
+              name={selectedGroup?.isPersonal ? "user" : "users"} 
+              size={16} 
+              color={theme.colors.primary} 
+            />
+            <Text style={[styles.compactGroupName, { color: theme.colors.text }]}>
+              {selectedGroup?.name || 'Personal Budget'}
+            </Text>
+            <Icon 
+              name={isExpanded ? "chevron-up" : "chevron-down"} 
+              size={16} 
+              color={theme.colors.textSecondary} 
+            />
+          </View>
+        </TouchableOpacity>
+        
+        {isExpanded && (
+          <View style={[styles.dropdownContainer, { 
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border + '30'
+          }]}>
+            {groups.map(group => (
+              <TouchableOpacity
+                key={group.id}
+                style={[
+                  styles.dropdownItem,
+                  selectedGroup?.id === group.id && { 
+                    backgroundColor: theme.colors.primary + '20'
+                  }
+                ]}
+                onPress={() => handleGroupSelect(group)}
+              >
+                <Icon 
+                  name={group.isPersonal ? "user" : "users"} 
+                  size={16} 
+                  color={selectedGroup?.id === group.id ? theme.colors.primary : theme.colors.textSecondary} 
+                />
+                <Text style={[
+                  styles.dropdownItemText,
+                  { color: theme.colors.text }
+                ]}>
+                  {group.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  // Full mode render
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
       {/* Header */}
@@ -357,8 +435,9 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
+    paddingTop: 60,
   },
   modalContent: {
     width: '90%',
@@ -416,5 +495,48 @@ const styles = StyleSheet.create({
   loadingText: {
     textAlign: 'center',
     fontSize: 16,
+  },
+
+  // Compact mode styles
+  compactContainer: {
+    position: 'relative',
+  },
+  compactSelector: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+  },
+  compactSelectedGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  compactGroupName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dropdownContainer: {
+    width: '90%',
+    maxWidth: 300,
+    borderRadius: 12,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
