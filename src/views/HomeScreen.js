@@ -21,9 +21,6 @@ import TransactionItem from './components/TransactionItem';
 import TransactionGroupItem from './components/TransactionGroupItem';
 import Icon from 'react-native-vector-icons/Feather';
 
-import { OfflineTransactionController } from '../controllers/OfflineTransactionController';
-import { OfflineBudgetController } from '../controllers/OfflineBudgetController';
-import { OfflineCategoryController } from '../controllers/OfflineCategoryController';
 import { OfflineBanner } from './components/OfflineBanner';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
@@ -45,9 +42,9 @@ const HomeScreen = ({navigation}) => {
   const [childTransactions, setChildTransactions] = useState({});
   const [loadingChildren, setLoadingChildren] = useState({});
 
-  const budgetController = new OfflineBudgetController();
-  const transactionController = new OfflineTransactionController();
-  const categoryController = new OfflineCategoryController();
+  const budgetController = new SupabaseBudgetController();
+  const transactionController = new SupabaseTransactionController();
+  const categoryController = new SupabaseCategoryController();
 
   const [syncStatus, setSyncStatus] = useState(null); // 'syncing', 'success', 'error'
   const { isOnline, isConnecting } = useNetworkStatus();
@@ -120,7 +117,15 @@ const HomeScreen = ({navigation}) => {
   };
 
   const loadDataForGroup = async (group = selectedGroup) => {
-    if (!group) return;
+    if (!group) {
+      console.log('loadDataForGroup: No group provided');
+      return;
+    }
+    
+    console.log('=== LOADING DATA FOR GROUP ===');
+    console.log('Group ID:', group.id);
+    console.log('Group Name:', group.name);
+    console.log('Is Personal:', group.isPersonal);
     
     setLoading(true);
     try {
@@ -134,24 +139,25 @@ const HomeScreen = ({navigation}) => {
       let spendingSummary;
       let transactions;
 
-      console.log('Loading data for group:', group.name, 'isPersonal:', group.isPersonal);
-
-      if (group.isPersonal) {
-        // Załaduj osobisty budżet
-        spendingSummary = await budgetController.getSpendingSummary(
-          currentMonth,
-          currentYear,
-        );
-        transactions = await transactionController.getAllTransactions();
+      if (group.isPersonal || group.id === 'personal') {
+        console.log('Loading PERSONAL budget data (group_id = null)...');
+        
+        // Użyj nowych metod dla osobistych transakcji
+        spendingSummary = await budgetController.getPersonalSpendingSummary(currentMonth, currentYear);
+        transactions = await budgetController.getPersonalTransactions();
+        
       } else {
-        // Załaduj budżet grupy
+        console.log('Loading GROUP budget data for group:', group.id);
         try {
-          transactions = await groupController.getGroupTransactions(group.id);
-          spendingSummary = await groupController.getGroupSpendingSummary(
-            group.id, 
-            currentMonth, 
-            currentYear
-          );
+          // Załaduj dane grupy
+          transactions = await budgetController.getGroupTransactions(group.id);
+          spendingSummary = await budgetController.getGroupSpendingSummary(group.id, currentMonth, currentYear);
+          
+          console.log('Group data loaded:', {
+            transactionCount: transactions?.length || 0,
+            totalIncome: spendingSummary?.totalIncome || 0,
+            totalExpenses: spendingSummary?.totalExpenses || 0
+          });
           
           // Jeśli nie ma transakcji, ustaw puste wartości
           if (!transactions || transactions.length === 0) {
@@ -182,26 +188,20 @@ const HomeScreen = ({navigation}) => {
       }
 
       // Sortuj transakcje po dacie
-      const sortedTransactions = transactions
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-      // Pobierz tylko 4 najnowsze transakcje
+      const sortedTransactions = transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
       const recent = sortedTransactions.slice(0, 4);
 
+      console.log('=== SETTING NEW DATA ===');
+      console.log('Total Income:', spendingSummary.totalIncome);
+      console.log('Total Expenses:', spendingSummary.totalExpenses);
+      console.log('Balance:', spendingSummary.balance);
+      console.log('Transaction count:', transactions.length);
+      
       setSummary(spendingSummary);
       setRecentTransactions(recent);
-
       setExpandedParents({});
       setChildTransactions({});
 
-      console.log(`Data loaded successfully for ${group.isPersonal ? 'personal' : 'group'} budget:`, {
-        groupId: group.id,
-        groupName: group.name,
-        transactionCount: transactions.length,
-        recentCount: recent.length,
-        totalIncome: spendingSummary.totalIncome,
-        totalExpenses: spendingSummary.totalExpenses
-      });
     } catch (error) {
       console.error('Error loading data for group:', error);
       if (isOnline) {
