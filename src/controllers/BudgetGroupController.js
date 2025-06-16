@@ -292,10 +292,16 @@ export class BudgetGroupController {
   // Get group spending summary
   async getGroupSpendingSummary(groupId, month, year) {
     try {
+      console.log(`Generating group spending summary for group ${groupId}, ${month}/${year}`);
+      
+      // Pobierz transakcje grupy dla danego miesiąca
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0);
+      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Sprawdź czy użytkownik należy do grupy
+      // Sprawdź członkostwo
       const { data: membership, error: membershipError } = await supabase
         .from('budget_group_members')
         .select('*')
@@ -316,28 +322,21 @@ export class BudgetGroupController {
         };
       }
 
-      // Pobierz transakcje grupy
-      const { data: transactions, error: transactionsError } = await supabase
+      // Pobierz transakcje grupy z filtrem daty
+      const { data: transactions, error } = await supabase
         .from('transactions')
         .select('*')
         .eq('group_id', groupId)
-        .order('date', { ascending: false });
+        .gte('date', startDate.toISOString())
+        .lte('date', endDate.toISOString());
 
-      if (transactionsError) {
-        console.error('Error fetching group transactions:', transactionsError);
-        return {
-          totalIncome: 0,
-          totalExpenses: 0,
-          balance: 0,
-          spendingByCategory: [],
-          monthlyBudget: 0,
-          totalBudget: 0,
-          budgetPercentage: 0
-        };
+      if (error) {
+        console.error('Error fetching group transactions:', error);
+        throw error;
       }
 
       // Pobierz budżet grupy
-      const { data: budget, error: budgetError } = await supabase
+      const { data: groupBudget } = await supabase
         .from('budgets')
         .select('*')
         .eq('group_id', groupId)
@@ -346,61 +345,38 @@ export class BudgetGroupController {
         .eq('is_group_budget', true)
         .single();
 
-      if (budgetError) {
-        console.error('Error fetching group budget:', budgetError);
-        return {
-          totalIncome: 0,
-          totalExpenses: 0,
-          balance: 0,
-          spendingByCategory: [],
-          monthlyBudget: 0,
-          totalBudget: 0,
-          budgetPercentage: 0
-        };
-      }
-
-      // Oblicz podsumowanie
-      const totalIncome = transactions
-        .filter(t => t.is_income === true)
-        .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
-
-      const totalExpenses = transactions
-        .filter(t => t.is_income === false && !t.is_parent)
-        .reduce((sum, t) => sum + (parseFloat(t.amount) || 0), 0);
-
-      const balance = totalIncome - totalExpenses;
-      const monthlyBudget = budget?.amount || 0;
-      const totalBudget = monthlyBudget + totalIncome;
-      const budgetPercentage = totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0;
-
+      const budgetAmount = groupBudget?.amount || 0;
+      
       // Pobierz kategorie
-      const { data: categories, error: categoriesError } = await supabase
+      const { data: categories } = await supabase
         .from('categories')
         .select('*');
 
-      if (categoriesError) {
-        console.error('Error fetching categories:', categoriesError);
-        return {
-          totalIncome,
-          totalExpenses,
-          balance,
-          spendingByCategory: [],
-          monthlyBudget,
-          totalBudget,
-          budgetPercentage
-        };
-      }
+      // Oblicz dochody i wydatki
+      const totalIncome = transactions
+        .filter(t => t.is_income === true)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+        
+      const totalExpenses = transactions
+        .filter(t => t.is_income === false && !t.is_parent)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
 
-      // Oblicz wydatki według kategorii
+      // Oblicz wydatki per kategoria
       const spendingByCategory = categories.map(category => {
         const categoryTransactions = transactions.filter(
           t => t.category === category.id && t.is_income === false && !t.is_parent
         );
         
-        const spent = categoryTransactions.reduce(
-          (sum, t) => sum + (parseFloat(t.amount) || 0),
-          0
-        );
+        const spent = categoryTransactions.reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
         
         const remaining = category.budget - spent;
         const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
@@ -413,26 +389,23 @@ export class BudgetGroupController {
         };
       });
 
-      return {
+      const totalBudget = budgetAmount + totalIncome;
+
+      const summary = {
         totalIncome,
         totalExpenses,
-        balance,
+        balance: totalIncome - totalExpenses,
+        monthlyBudget: budgetAmount,
+        totalBudget: totalBudget,
         spendingByCategory,
-        monthlyBudget,
-        totalBudget,
-        budgetPercentage
+        budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
       };
+
+      console.log('Generated group spending summary:', summary);
+      return summary;
     } catch (error) {
-      console.error('Error getting group spending summary:', error);
-      return {
-        totalIncome: 0,
-        totalExpenses: 0,
-        balance: 0,
-        spendingByCategory: [],
-        monthlyBudget: 0,
-        totalBudget: 0,
-        budgetPercentage: 0
-      };
+      console.error('Error generating group spending summary:', error);
+      throw error;
     }
   }
 }
