@@ -30,6 +30,7 @@ import { OfflineTransactionController } from '../controllers/OfflineTransactionC
 import { OfflineCategoryController } from '../controllers/OfflineCategoryController';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import {OfflineBanner} from './components/OfflineBanner';
+import { BudgetGroupController } from '../controllers/BudgetGroupController';
 
 const {width} = Dimensions.get('window');
 
@@ -100,6 +101,8 @@ const AddTransactionScreen = ({route, navigation}) => {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupController] = useState(new BudgetGroupController());
 
   // Category modal state
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -163,6 +166,15 @@ const AddTransactionScreen = ({route, navigation}) => {
       }
     }
   }, [editTransaction, navigation]);
+
+  // Pobierz aktualnie wybraną grupę z parametrów nawigacji lub kontekstu
+  useEffect(() => {
+    // Sprawdź czy grupa została przekazana przez nawigację
+    const groupFromParams = route.params?.selectedGroup;
+    if (groupFromParams) {
+      setSelectedGroup(groupFromParams);
+    }
+  }, [route.params]);
 
   const loadData = async () => {
     setLoading(true);
@@ -320,166 +332,68 @@ const AddTransactionScreen = ({route, navigation}) => {
     }
   };
 
-  // const handleSave = async () => {
-  //   if (editTransaction && editTransaction.is_parent) {
-  //     navigation.goBack();
-  //     return;
-  //   }
-
-  //   let formattedAmount = amount.replace(',', '.');
-
-  //   if (
-  //     !formattedAmount ||
-  //     isNaN(parseFloat(formattedAmount)) ||
-  //     parseFloat(formattedAmount) <= 0
-  //   ) {
-  //     Alert.alert('Error', 'Please enter a valid amount');
-  //     return;
-  //   }
-
-  //   if (!description.trim()) {
-  //     Alert.alert('Error', 'Please enter a description');
-  //     return;
-  //   }
-
-  //   if (!is_income && !selectedCategory) {
-  //     Alert.alert('Error', 'Please select a category');
-  //     return;
-  //   }
-
-  //   setIsSaving(true);
-
-  //   try {
-  //     const transactionData = {
-  //       amount: parsedAmount,
-  //       description,
-  //       category: categoryId,
-  //       is_income: is_income,
-  //       date: new Date().toISOString(),
-  //       is_parent: false,
-  //       parent_id: null,
-  //     };
-
-  //     if (editTransaction) {
-  //       await transactionController.updateTransaction(
-  //         editTransaction.id,
-  //         transactionData,
-  //       );
-  //     } else {
-  //       await transactionController.addTransaction(transactionData);
-  //     }
-
-  //     // Show different messages for offline
-  //     if (!isOnline) {
-  //       Alert.alert(
-  //         'Saved Offline', 
-  //         'Transaction saved locally. It will sync when you\'re back online.'
-  //       );
-  //     }
-
-  //     navigation.goBack();
-  //   } catch (error) {
-  //     Alert.alert('Error', 'Failed to save transaction.');
-  //   } finally {
-  //     setIsSaving(false);
-  //   }
-  // };
-
-  // Zamień funkcję handleSave w AddTransactionScreen.js na tę poprawioną:
-
-// 🚨 ZAMIEŃ CAŁĄ FUNKCJĘ handleSave w AddTransactionScreen.js na tę:
-
-const handleSave = async () => {
-  console.log('🔄 handleSave started');
-  
-  if (editTransaction && editTransaction.is_parent) {
-    navigation.goBack();
-    return;
-  }
-
-  let formattedAmount = amount.replace(',', '.');
-  console.log('💰 Original amount:', amount, '-> Formatted:', formattedAmount);
-
-  // Validation
-  if (
-    !formattedAmount ||
-    isNaN(parseFloat(formattedAmount)) ||
-    parseFloat(formattedAmount) <= 0
-  ) {
-    Alert.alert('Error', 'Please enter a valid amount');
-    return;
-  }
-
-  if (!description.trim()) {
-    Alert.alert('Error', 'Please enter a description');
-    return;
-  }
-
-  if (!is_income && !selectedCategory) {
-    Alert.alert('Error', 'Please select a category');
-    return;
-  }
-
-  setIsSaving(true);
-
-  try {
-    // 🚨 POPRAWIONE: Używamy prawidłowych zmiennych
-    const parsedAmount = parseFloat(formattedAmount); // ✅ Teraz parsedAmount istnieje
-    
-    const transactionData = {
-      amount: parsedAmount,           // ✅ Używamy lokalnej zmiennej parsedAmount
-      description: description.trim(),
-      category: selectedCategory,     // ✅ Używamy selectedCategory zamiast categoryId
-      is_income: is_income,
-      date: new Date().toISOString(),
-      is_parent: false,
-      parent_id: null,
-    };
-
-    console.log('📤 Transaction data to save:', transactionData);
-
-    if (editTransaction) {
-      console.log('✏️ Updating existing transaction:', editTransaction.id);
-      await transactionController.updateTransaction(
-        editTransaction.id,
-        transactionData,
-      );
-      console.log('✅ Transaction updated successfully');
-    } else {
-      console.log('➕ Adding new transaction');
-      const result = await transactionController.addTransaction(transactionData);
-      console.log('✅ Transaction added successfully:', result);
+  const handleSubmit = async () => {
+    if (!amount || !description || !selectedCategory) {
+      Alert.alert('Error', 'Please fill in all required fields');
+      return;
     }
 
-    // Show success message
-    if (!isOnline) {
-      Alert.alert(
-        'Saved Offline', 
-        'Transaction saved locally. It will sync when you\'re back online.'
-      );
-    } else {
-      Alert.alert(
-        'Success', 
-        `Transaction ${editTransaction ? 'updated' : 'saved'} successfully!`
-      );
-    }
+    setIsSaving(true);
 
-    console.log('✅ Navigating back');
-    navigation.goBack();
-    
-  } catch (error) {
-    console.error('❌ Error saving transaction:', error);
-    console.error('❌ Error details:', error.message);
-    console.error('❌ Error stack:', error.stack);
-    
-    Alert.alert(
-      'Error', 
-      `Failed to save transaction: ${error.message || 'Unknown error'}`
-    );
-  } finally {
-    setIsSaving(false);
-  }
-};
+    try {
+      const transactionData = {
+        amount: parseFloat(amount),
+        description,
+        is_income,
+        category: selectedCategory.id,
+        date: new Date().toISOString(),
+        recurring,
+        frequency: recurring ? frequency : null,
+        custom_frequency: recurring && frequency === 'custom' ? customFrequency : null,
+      };
+
+      let savedTransaction;
+
+      // Sprawdź czy to transakcja grupowa czy osobista
+      if (selectedGroup && !selectedGroup.isPersonal) {
+        // Transakcja grupowa
+        savedTransaction = await groupController.addGroupTransaction(
+          selectedGroup.id, 
+          transactionData
+        );
+      } else {
+        // Transakcja osobista
+        if (editTransaction) {
+          savedTransaction = await transactionController.updateTransaction(
+            editTransaction.id,
+            transactionData
+          );
+        } else {
+          savedTransaction = await transactionController.addTransaction(transactionData);
+        }
+      }
+
+      if (receiptImagePath) {
+        await attachReceiptToTransaction(savedTransaction.id);
+      }
+
+      Alert.alert(
+        'Success',
+        `Transaction ${editTransaction ? 'updated' : 'added'} successfully!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error saving transaction:', error);
+      Alert.alert('Error', 'Failed to save transaction. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleDeleteCategory = async categoryId => {
     try {
@@ -1111,7 +1025,7 @@ const handleSave = async () => {
                 styles.saveButton,
                 {backgroundColor: theme.colors.primary},
               ]}
-              onPress={handleSave}
+              onPress={handleSubmit}
               disabled={isSaving}>
               {isSaving ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
@@ -1776,6 +1690,41 @@ const styles = StyleSheet.create({
 
   bottomSpace: {
     height: 20,
+  },
+
+  offlineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#FFEB3B',
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  offlineText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
+  offlineWarning: {
+    color: 'red',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+
+  groupIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#E3F2FD',
+    borderRadius: 8,
+    marginBottom: 16,
+    gap: 8,
+  },
+  groupText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
 

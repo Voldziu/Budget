@@ -29,6 +29,8 @@ import BudgetScreen from './src/views/BudgetScreen';
 import SettingsScreen from './src/views/SettingsScreen';
 import TransactionDetailScreen from './src/views/TransactionDetailScreen';
 import LoginScreen from './src/views/LoginScreen';
+import GroupInvitationsScreen from './src/views/GroupInvitationsScreen';
+import InviteUserScreen from './src/views/InviteUserScreen';
 
 import { OfflineAuthService } from './src/services/OfflineAuthService';
 import NetInfo from '@react-native-community/netinfo';
@@ -311,6 +313,16 @@ const AppNavigator = ({isAuthenticated}) => {
           presentation: 'modal',
           //presentation: 'card',
         }}
+      />
+      <Stack.Screen
+        name="GroupInvitations"
+        component={GroupInvitationsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="InviteUser"
+        component={InviteUserScreen}
+        options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );

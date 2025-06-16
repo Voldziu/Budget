@@ -119,3 +119,40 @@ CREATE POLICY "Users can update their own transactions"
 CREATE POLICY "Users can delete their own transactions"
   ON transactions FOR DELETE
   USING (auth.uid() = user_id);
+
+  -- Tabela grup budżetowych
+CREATE TABLE budget_groups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  created_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+
+-- Tabela członków grup
+CREATE TABLE budget_group_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  group_id UUID REFERENCES budget_groups(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  role VARCHAR(50) DEFAULT 'member', -- 'admin', 'member', 'viewer'
+  joined_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  UNIQUE(group_id, user_id)
+);
+
+-- Modyfikacja istniejącej tabeli budgets
+ALTER TABLE budgets ADD COLUMN group_id UUID REFERENCES budget_groups(id);
+ALTER TABLE budgets ADD COLUMN is_group_budget BOOLEAN DEFAULT false;
+
+-- Modyfikacja tabeli transactions
+ALTER TABLE transactions ADD COLUMN group_id UUID REFERENCES budget_groups(id);
+
+-- Tylko dodaj tabelę zaproszeń (reszta już istnieje)
+CREATE TABLE group_invitations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  group_id UUID REFERENCES budget_groups(id),
+  invited_by UUID REFERENCES auth.users(id),
+  invited_email TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT NOW()
+);

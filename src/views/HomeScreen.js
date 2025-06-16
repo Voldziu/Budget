@@ -325,398 +325,348 @@ const HomeScreen = ({navigation}) => {
   const isPositive = balance >= 0;
 
   return (
-    <View
-      style={[styles.container, {backgroundColor: theme.colors.background}]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
+      
+      {/* Offline Banner */}
       <OfflineBanner />
+      
+      {/* Group Selector - DODAJ TO */}
+      <BudgetGroupSelector 
+        onGroupChange={handleGroupChange} 
+        navigation={navigation}
+      />
 
-      {syncStatus && (
-        <View style={[
-          styles.syncBanner, 
-          { 
-            backgroundColor: syncStatus === 'error' 
-              ? theme.colors.error 
-              : syncStatus === 'success' 
-                ? theme.colors.success 
-                : theme.colors.primary 
-          }
-        ]}>
-          <Text style={styles.syncText}>
-            {syncStatus === 'syncing' && 'Syncing data...'}
-            {syncStatus === 'success' && 'Data synced successfully!'}
-            {syncStatus === 'error' && 'Sync failed. Will retry later.'}
+      {/* Reszta zawartości HomeScreen... */}
+      <ScrollView style={styles.content}>
+        {/* Greeting Section */}
+        <View style={styles.greetingContainer}>
+          <Text
+            style={[
+              styles.greeting,
+              {color: theme.colors.textSecondary},
+            ]}>
+            {getGreeting()}
+          </Text>
+          <Text style={[styles.userName, {color: theme.colors.text}]}>
+            {selectedGroup.isPersonal ? 'Personal Budget' : selectedGroup.name}
           </Text>
         </View>
-      )}
-
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          bounces={true}>
-          
-          {/* Dodaj selektor grup na początku */}
-          <View style={styles.groupSelectorContainer}>
-            <BudgetGroupSelector 
-              selectedGroup={selectedGroup}
-              onGroupChange={handleGroupChange}
-            />
-          </View>
-
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerContent}>
-              <View style={styles.greetingContainer}>
+        
+        {/* Summary Cards */}
+        <View style={styles.balanceCardContainer}>
+          <LinearGradient
+            colors={getBalanceGradientColors()}
+            style={[
+              styles.balanceCard,
+              {
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.1)'
+                  : 'rgba(0, 0, 0, 0.05)',
+              },
+            ]}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 1}}>
+            {/* Glassmorphism overlay */}
+            <View
+              style={[
+                styles.glassOverlay,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(255, 255, 255, 0.7)',
+                },
+              ]}>
+              {/* Header */}
+              <View style={styles.balanceHeader}>
+                <View
+                  style={[
+                    styles.balanceIconContainer,
+                    {
+                      backgroundColor: isPositive
+                        ? theme.colors.success + '20'
+                        : theme.colors.error + '20',
+                      borderColor: isPositive
+                        ? theme.colors.success + '30'
+                        : theme.colors.error + '30',
+                    },
+                  ]}>
+                  <Icon
+                    name={isPositive ? 'trending-up' : 'trending-down'}
+                    size={22}
+                    color={
+                      isPositive ? theme.colors.success : theme.colors.error
+                    }
+                  />
+                </View>
                 <Text
                   style={[
-                    styles.greeting,
+                    styles.balanceLabel,
                     {color: theme.colors.textSecondary},
                   ]}>
-                  {getGreeting()}
-                </Text>
-                <Text style={[styles.userName, {color: theme.colors.text}]}>
-                  {selectedGroup.isPersonal ? 'Personal Budget' : selectedGroup.name}
+                  Total Balance
                 </Text>
               </View>
 
-              <TouchableOpacity
+              {/* Main Balance */}
+              <Text
                 style={[
-                  styles.profileButton,
+                  styles.balance,
                   {
-                    backgroundColor: isDark
-                      ? 'rgba(255, 255, 255, 0.1)'
-                      : 'rgba(0, 0, 0, 0.05)',
-                    borderColor: isDark
-                      ? 'rgba(255, 255, 255, 0.15)'
-                      : 'rgba(0, 0, 0, 0.1)',
-                  },
-                ]}
-                onPress={() => navigation.navigate('Settings')}>
-                <Icon
-                  name="user"
-                  size={20}
-                  color={theme.colors.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Enhanced Balance Card with Glassmorphism */}
-          <View style={styles.balanceCardContainer}>
-            <LinearGradient
-              colors={getBalanceGradientColors()}
-              style={[
-                styles.balanceCard,
-                {
-                  borderColor: isDark
-                    ? 'rgba(255, 255, 255, 0.1)'
-                    : 'rgba(0, 0, 0, 0.05)',
-                },
-              ]}
-              start={{x: 0, y: 0}}
-              end={{x: 1, y: 1}}>
-              {/* Glassmorphism overlay */}
-              <View
-                style={[
-                  styles.glassOverlay,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(255, 255, 255, 0.05)'
-                      : 'rgba(255, 255, 255, 0.7)',
+                    color: isPositive
+                      ? theme.colors.success
+                      : theme.colors.error,
                   },
                 ]}>
-                {/* Header */}
-                <View style={styles.balanceHeader}>
-                  <View
-                    style={[
-                      styles.balanceIconContainer,
-                      {
-                        backgroundColor: isPositive
-                          ? theme.colors.success + '20'
-                          : theme.colors.error + '20',
-                        borderColor: isPositive
-                          ? theme.colors.success + '30'
-                          : theme.colors.error + '30',
-                      },
-                    ]}>
-                    <Icon
-                      name={isPositive ? 'trending-up' : 'trending-down'}
-                      size={22}
-                      color={
-                        isPositive ? theme.colors.success : theme.colors.error
-                      }
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.balanceLabel,
-                      {color: theme.colors.textSecondary},
-                    ]}>
-                    Total Balance
-                  </Text>
-                </View>
+                {formatAmount(balance)}
+              </Text>
 
-                {/* Main Balance */}
-                <Text
+              {/* Status */}
+              <View style={styles.balanceStatus}>
+                <View
                   style={[
-                    styles.balance,
+                    styles.statusIndicator,
                     {
-                      color: isPositive
+                      backgroundColor: isPositive
                         ? theme.colors.success
                         : theme.colors.error,
                     },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.statusText,
+                    {color: theme.colors.textSecondary},
                   ]}>
-                  {formatAmount(balance)}
+                  {isPositive
+                    ? "You're doing great!"
+                    : 'Review your expenses'}
                 </Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </View>
 
-                {/* Status */}
-                <View style={styles.balanceStatus}>
-                  <View
-                    style={[
-                      styles.statusIndicator,
-                      {
-                        backgroundColor: isPositive
-                          ? theme.colors.success
-                          : theme.colors.error,
-                      },
-                    ]}
+        {/* Quick Stats with Glassmorphism */}
+        <View style={styles.statsContainer}>
+          <TouchableOpacity
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(255, 255, 255, 0.05)'
+                  : 'rgba(255, 255, 255, 0.8)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.1)'
+                  : 'rgba(0, 0, 0, 0.05)',
+              },
+            ]}
+            onPress={() => navigation.navigate('Budget')}
+            activeOpacity={0.8}>
+            <LinearGradient
+              colors={
+                isDark
+                  ? ['rgba(76, 175, 80, 0.1)', 'rgba(76, 175, 80, 0.05)']
+                  : ['rgba(76, 175, 80, 0.05)', 'rgba(76, 175, 80, 0.02)']
+              }
+              style={styles.statGradient}>
+              <View style={styles.statIcon}>
+                <View
+                  style={[
+                    styles.statIconCircle,
+                    {backgroundColor: theme.colors.success + '20'},
+                  ]}>
+                  <Icon
+                    name="trending-up"
+                    size={20}
+                    color={theme.colors.success}
                   />
-                  <Text
-                    style={[
-                      styles.statusText,
-                      {color: theme.colors.textSecondary},
-                    ]}>
-                    {isPositive
-                      ? "You're doing great!"
-                      : 'Review your expenses'}
-                  </Text>
                 </View>
               </View>
-            </LinearGradient>
-          </View>
 
-          {/* Quick Stats with Glassmorphism */}
-          <View style={styles.statsContainer}>
-            <TouchableOpacity
-              style={[
-                styles.statCard,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(255, 255, 255, 0.05)'
-                    : 'rgba(255, 255, 255, 0.8)',
-                  borderColor: isDark
-                    ? 'rgba(255, 255, 255, 0.1)'
-                    : 'rgba(0, 0, 0, 0.05)',
-                },
-              ]}
-              onPress={() => navigation.navigate('Budget')}
-              activeOpacity={0.8}>
-              <LinearGradient
-                colors={
-                  isDark
-                    ? ['rgba(76, 175, 80, 0.1)', 'rgba(76, 175, 80, 0.05)']
-                    : ['rgba(76, 175, 80, 0.05)', 'rgba(76, 175, 80, 0.02)']
-                }
-                style={styles.statGradient}>
-                <View style={styles.statIcon}>
-                  <View
-                    style={[
-                      styles.statIconCircle,
-                      {backgroundColor: theme.colors.success + '20'},
-                    ]}>
-                    <Icon
-                      name="trending-up"
-                      size={20}
-                      color={theme.colors.success}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.statContent}>
-                  <Text
-                    style={[
-                      styles.statLabel,
-                      {color: theme.colors.textSecondary},
-                    ]}>
-                    Income
-                  </Text>
-                  <Text
-                    style={[
-                      {
-                        fontSize: getDynamicFontSize(summary?.totalIncome || 0),
-                        fontWeight: '700',
-                        color: theme.colors.success,
-                      },
-                    ]}>
-                    +{formatAmount(summary?.totalIncome || 0)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statSubtext,
-                      {color: theme.colors.textTertiary},
-                    ]}>
-                    This month
-                  </Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.statCard,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(255, 255, 255, 0.05)'
-                    : 'rgba(255, 255, 255, 0.8)',
-                  borderColor: isDark
-                    ? 'rgba(255, 255, 255, 0.1)'
-                    : 'rgba(0, 0, 0, 0.05)',
-                },
-              ]}
-              onPress={() => navigation.navigate('Budget')}
-              activeOpacity={0.8}>
-              <LinearGradient
-                colors={
-                  isDark
-                    ? ['rgba(244, 67, 54, 0.1)', 'rgba(244, 67, 54, 0.05)']
-                    : ['rgba(244, 67, 54, 0.05)', 'rgba(244, 67, 54, 0.02)']
-                }
-                style={styles.statGradient}>
-                <View style={styles.statIcon}>
-                  <View
-                    style={[
-                      styles.statIconCircle,
-                      {backgroundColor: theme.colors.error + '20'},
-                    ]}>
-                    <Icon
-                      name="trending-down"
-                      size={20}
-                      color={theme.colors.error}
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.statContent}>
-                  <Text
-                    style={[
-                      styles.statLabel,
-                      {color: theme.colors.textSecondary},
-                    ]}>
-                    Expenses
-                  </Text>
-                  <Text
-                    style={[
-                      {
-                        fontSize: getDynamicFontSize(
-                          summary?.totalExpenses || 0,
-                        ),
-                        fontWeight: '700',
-                        color: theme.colors.error,
-                      },
-                    ]}>
-                    -{formatAmount(summary?.totalExpenses || 0)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.statSubtext,
-                      {color: theme.colors.textTertiary},
-                    ]}>
-                    This month
-                  </Text>
-                </View>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-
-          {/* Recent Transactions with Glassmorphism */}
-          <View style={styles.transactionsSection}>
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
-                Recent Activity
-              </Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('Transactions')}
-                style={[
-                  styles.viewAllButton,
-                  {
-                    backgroundColor: isDark
-                      ? 'rgba(255, 255, 255, 0.05)'
-                      : 'rgba(0, 0, 0, 0.03)',
-                  },
-                ]}>
+              <View style={styles.statContent}>
                 <Text
-                  style={[styles.viewAllText, {color: theme.colors.primary}]}>
-                  View all
+                  style={[
+                    styles.statLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Income
                 </Text>
-                <Icon
-                  name="chevron-right"
-                  size={16}
-                  color={theme.colors.primary}
-                />
-              </TouchableOpacity>
-            </View>
+                <Text
+                  style={[
+                    {
+                      fontSize: getDynamicFontSize(summary?.totalIncome || 0),
+                      fontWeight: '700',
+                      color: theme.colors.success,
+                    },
+                  ]}>
+                  +{formatAmount(summary?.totalIncome || 0)}
+                </Text>
+                <Text
+                  style={[
+                    styles.statSubtext,
+                    {color: theme.colors.textTertiary},
+                  ]}>
+                  This month
+                </Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
 
-            <View
+          <TouchableOpacity
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: isDark
+                  ? 'rgba(255, 255, 255, 0.05)'
+                  : 'rgba(255, 255, 255, 0.8)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.1)'
+                  : 'rgba(0, 0, 0, 0.05)',
+              },
+            ]}
+            onPress={() => navigation.navigate('Budget')}
+            activeOpacity={0.8}>
+            <LinearGradient
+              colors={
+                isDark
+                  ? ['rgba(244, 67, 54, 0.1)', 'rgba(244, 67, 54, 0.05)']
+                  : ['rgba(244, 67, 54, 0.05)', 'rgba(244, 67, 54, 0.02)']
+              }
+              style={styles.statGradient}>
+              <View style={styles.statIcon}>
+                <View
+                  style={[
+                    styles.statIconCircle,
+                    {backgroundColor: theme.colors.error + '20'},
+                  ]}>
+                  <Icon
+                    name="trending-down"
+                    size={20}
+                    color={theme.colors.error}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.statContent}>
+                <Text
+                  style={[
+                    styles.statLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Expenses
+                </Text>
+                <Text
+                  style={[
+                    {
+                      fontSize: getDynamicFontSize(
+                        summary?.totalExpenses || 0,
+                      ),
+                      fontWeight: '700',
+                      color: theme.colors.error,
+                    },
+                  ]}>
+                  -{formatAmount(summary?.totalExpenses || 0)}
+                </Text>
+                <Text
+                  style={[
+                    styles.statSubtext,
+                    {color: theme.colors.textTertiary},
+                  ]}>
+                  This month
+                </Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+
+        {/* Recent Transactions with Glassmorphism */}
+        <View style={styles.transactionsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
+              Recent Activity
+            </Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Transactions')}
               style={[
-                styles.transactionsCard,
+                styles.viewAllButton,
                 {
-                  backgroundColor: theme.colors.card,
-                  ...theme.shadows.medium,
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(0, 0, 0, 0.03)',
                 },
               ]}>
-              {recentTransactions.length > 0 ? (
-                recentTransactions.map((transaction, index) =>
-                  renderTransaction(transaction, index),
-                )
-              ) : (
-                <View style={styles.emptyState}>
-                  <View
-                    style={[
-                      styles.emptyIcon,
-                      {
-                        backgroundColor: isDark
-                          ? 'rgba(255, 255, 255, 0.1)'
-                          : 'rgba(0, 0, 0, 0.05)',
-                      },
-                    ]}>
-                    <Icon
-                      name="activity"
-                      size={32}
-                      color={theme.colors.textTertiary}
-                    />
-                  </View>
-                  <Text style={[styles.emptyTitle, {color: theme.colors.text}]}>
-                    No transactions yet
-                  </Text>
-                  <Text
-                    style={[
-                      styles.emptySubtitle,
-                      {color: theme.colors.textSecondary},
-                    ]}>
-                    Start tracking your finances by adding your first
-                    transaction
-                  </Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.emptyButton,
-                      {backgroundColor: theme.colors.primary},
-                    ]}
-                    onPress={() => navigation.navigate('AddTransaction')}>
-                    <Text style={styles.emptyButtonText}>Add Transaction</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
+              <Text
+                style={[styles.viewAllText, {color: theme.colors.primary}]}>
+                View all
+              </Text>
+              <Icon
+                name="chevron-right"
+                size={16}
+                color={theme.colors.primary}
+              />
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.bottomPadding} />
-        </ScrollView>
-      </SafeAreaView>
-    </View>
+          <View
+            style={[
+              styles.transactionsCard,
+              {
+                backgroundColor: theme.colors.card,
+                ...theme.shadows.medium,
+              },
+            ]}>
+            {recentTransactions.length > 0 ? (
+              recentTransactions.map((transaction, index) =>
+                renderTransaction(transaction, index),
+              )
+            ) : (
+              <View style={styles.emptyState}>
+                <View
+                  style={[
+                    styles.emptyIcon,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255, 255, 255, 0.1)'
+                        : 'rgba(0, 0, 0, 0.05)',
+                    },
+                  ]}>
+                  <Icon
+                    name="activity"
+                    size={32}
+                    color={theme.colors.textTertiary}
+                  />
+                </View>
+                <Text style={[styles.emptyTitle, {color: theme.colors.text}]}>
+                  No transactions yet
+                </Text>
+                <Text
+                  style={[
+                    styles.emptySubtitle,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Start tracking your finances by adding your first
+                  transaction
+                </Text>
+                <TouchableOpacity
+                  style={[
+                    styles.emptyButton,
+                    {backgroundColor: theme.colors.primary},
+                  ]}
+                  onPress={() => navigation.navigate('AddTransaction')}>
+                  <Text style={styles.emptyButtonText}>Add Transaction</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.bottomPadding} />
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
