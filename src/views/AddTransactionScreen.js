@@ -30,7 +30,6 @@ import { OfflineTransactionController } from '../controllers/OfflineTransactionC
 import { OfflineCategoryController } from '../controllers/OfflineCategoryController';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import {OfflineBanner} from './components/OfflineBanner';
-import { BudgetGroupController } from '../controllers/BudgetGroupController';
 
 const {width} = Dimensions.get('window');
 
@@ -102,16 +101,6 @@ const AddTransactionScreen = ({route, navigation}) => {
   const [isSaving, setIsSaving] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
 
-  // ✅ DODANE: State dla grup budżetowych
-  const [selectedGroup, setSelectedGroup] = useState({ 
-    id: 'personal', 
-    name: 'Personal Budget', 
-    isPersonal: true 
-  });
-  const [userGroups, setUserGroups] = useState([]);
-  const [showGroupModal, setShowGroupModal] = useState(false);
-  const [groupController] = useState(new BudgetGroupController());
-
   // Category modal state
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -120,16 +109,19 @@ const AddTransactionScreen = ({route, navigation}) => {
   const [newCategoryBudget, setNewCategoryBudget] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
 
-  // ✅ PRZYWRÓCONE: Receipt image state
+  // Receipt image state
   const [receiptImage, setReceiptImage] = useState(null);
   const [isAnalyzingReceipt, setIsAnalyzingReceipt] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [analysisResults, setAnalysisResults] = useState([]);
   const [storeName, setStoreName] = useState('');
 
-  const { isOnline } = useNetworkStatus();
+    const { isOnline } = useNetworkStatus();
+
 
   // Controllers
+  // const categoryController = new SupabaseCategoryController();
+  // const transactionController = new SupabaseTransactionController();
   const categoryController = new OfflineCategoryController();
   const transactionController = new OfflineTransactionController();
 
@@ -137,39 +129,6 @@ const AddTransactionScreen = ({route, navigation}) => {
   useEffect(() => {
     loadData();
   }, []);
-
-  // ✅ DODANE: Załaduj grupy użytkownika
-  useEffect(() => {
-    loadUserGroups();
-  }, []);
-
-  // Pobierz aktualnie wybraną grupę z parametrów nawigacji lub kontekstu
-  useEffect(() => {
-    const groupFromParams = route.params?.selectedGroup;
-    if (groupFromParams) {
-      setSelectedGroup(groupFromParams);
-    }
-  }, [route.params]);
-
-  // ✅ DODANE: Funkcja ładowania grup użytkownika
-  const loadUserGroups = async () => {
-    try {
-      const groups = await groupController.getUserGroups();
-      const personalGroup = { 
-        id: 'personal', 
-        name: 'Personal Budget', 
-        isPersonal: true 
-      };
-      setUserGroups([personalGroup, ...groups]);
-    } catch (error) {
-      console.error('Error loading user groups:', error);
-      setUserGroups([{ 
-        id: 'personal', 
-        name: 'Personal Budget', 
-        isPersonal: true 
-      }]);
-    }
-  };
 
   // Populate form if editing
   useEffect(() => {
@@ -269,7 +228,6 @@ const AddTransactionScreen = ({route, navigation}) => {
     }
   };
 
-  // ✅ PRZYWRÓCONE: Funkcje do obsługi zdjęć
   const handleTakePhoto = () => {
     launchCamera({mediaType: 'photo', quality: 0.8}, response => {
       if (
@@ -294,7 +252,6 @@ const AddTransactionScreen = ({route, navigation}) => {
     });
   };
 
-  // ✅ PRZYWRÓCONE: Funkcja analizy paragonu
   const handleAnalyzeReceipt = async () => {
     if (!isOnline) {
       Alert.alert(
@@ -363,94 +320,166 @@ const AddTransactionScreen = ({route, navigation}) => {
     }
   };
 
-  // ✅ POPRAWIONA: Funkcja zapisu
-  const handleSave = async () => {
-    console.log('🔄 handleSave started');
+  // const handleSave = async () => {
+  //   if (editTransaction && editTransaction.is_parent) {
+  //     navigation.goBack();
+  //     return;
+  //   }
+
+  //   let formattedAmount = amount.replace(',', '.');
+
+  //   if (
+  //     !formattedAmount ||
+  //     isNaN(parseFloat(formattedAmount)) ||
+  //     parseFloat(formattedAmount) <= 0
+  //   ) {
+  //     Alert.alert('Error', 'Please enter a valid amount');
+  //     return;
+  //   }
+
+  //   if (!description.trim()) {
+  //     Alert.alert('Error', 'Please enter a description');
+  //     return;
+  //   }
+
+  //   if (!is_income && !selectedCategory) {
+  //     Alert.alert('Error', 'Please select a category');
+  //     return;
+  //   }
+
+  //   setIsSaving(true);
+
+  //   try {
+  //     const transactionData = {
+  //       amount: parsedAmount,
+  //       description,
+  //       category: categoryId,
+  //       is_income: is_income,
+  //       date: new Date().toISOString(),
+  //       is_parent: false,
+  //       parent_id: null,
+  //     };
+
+  //     if (editTransaction) {
+  //       await transactionController.updateTransaction(
+  //         editTransaction.id,
+  //         transactionData,
+  //       );
+  //     } else {
+  //       await transactionController.addTransaction(transactionData);
+  //     }
+
+  //     // Show different messages for offline
+  //     if (!isOnline) {
+  //       Alert.alert(
+  //         'Saved Offline', 
+  //         'Transaction saved locally. It will sync when you\'re back online.'
+  //       );
+  //     }
+
+  //     navigation.goBack();
+  //   } catch (error) {
+  //     Alert.alert('Error', 'Failed to save transaction.');
+  //   } finally {
+  //     setIsSaving(false);
+  //   }
+  // };
+
+  // Zamień funkcję handleSave w AddTransactionScreen.js na tę poprawioną:
+
+// 🚨 ZAMIEŃ CAŁĄ FUNKCJĘ handleSave w AddTransactionScreen.js na tę:
+
+const handleSave = async () => {
+  console.log('🔄 handleSave started');
+  
+  if (editTransaction && editTransaction.is_parent) {
+    navigation.goBack();
+    return;
+  }
+
+  let formattedAmount = amount.replace(',', '.');
+  console.log('💰 Original amount:', amount, '-> Formatted:', formattedAmount);
+
+  // Validation
+  if (
+    !formattedAmount ||
+    isNaN(parseFloat(formattedAmount)) ||
+    parseFloat(formattedAmount) <= 0
+  ) {
+    Alert.alert('Error', 'Please enter a valid amount');
+    return;
+  }
+
+  if (!description.trim()) {
+    Alert.alert('Error', 'Please enter a description');
+    return;
+  }
+
+  if (!is_income && !selectedCategory) {
+    Alert.alert('Error', 'Please select a category');
+    return;
+  }
+
+  setIsSaving(true);
+
+  try {
+    // 🚨 POPRAWIONE: Używamy prawidłowych zmiennych
+    const parsedAmount = parseFloat(formattedAmount); // ✅ Teraz parsedAmount istnieje
     
-    if (editTransaction && editTransaction.is_parent) {
-      navigation.goBack();
-      return;
-    }
+    const transactionData = {
+      amount: parsedAmount,           // ✅ Używamy lokalnej zmiennej parsedAmount
+      description: description.trim(),
+      category: selectedCategory,     // ✅ Używamy selectedCategory zamiast categoryId
+      is_income: is_income,
+      date: new Date().toISOString(),
+      is_parent: false,
+      parent_id: null,
+    };
 
-    let formattedAmount = amount.replace(',', '.');
-    console.log('💰 Original amount:', amount, '-> Formatted:', formattedAmount);
+    console.log('📤 Transaction data to save:', transactionData);
 
-    // Validation
-    if (
-      !formattedAmount ||
-      isNaN(parseFloat(formattedAmount)) ||
-      parseFloat(formattedAmount) <= 0
-    ) {
-      Alert.alert('Error', 'Please enter a valid amount');
-      return;
-    }
-
-    if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a description');
-      return;
-    }
-
-    if (!is_income && !selectedCategory) {
-      Alert.alert('Error', 'Please select a category');
-      return;
-    }
-
-    setIsSaving(true);
-
-    try {
-      const parsedAmount = parseFloat(formattedAmount);
-      
-      const transactionData = {
-        amount: parsedAmount,
-        description: description.trim(),
-        category: selectedCategory,
-        is_income: is_income,
-        date: new Date().toISOString(),
-        is_parent: false,
-        parent_id: null,
-        recurring,
-        frequency: recurring ? frequency : null,
-        custom_frequency: recurring && frequency === 'custom' ? customFrequency : null,
-      };
-
-      // ✅ DODANE: Obsługa transakcji grupowych
-      if (selectedGroup && !selectedGroup.isPersonal) {
-        // Transakcja grupowa
-        await groupController.addGroupTransaction(selectedGroup.id, transactionData);
-      } else {
-        // Transakcja osobista
-        if (editTransaction) {
-          await transactionController.updateTransaction(editTransaction.id, transactionData);
-        } else {
-          await transactionController.addTransaction(transactionData);
-        }
-      }
-
-      // Show success message
-      if (!isOnline) {
-        Alert.alert(
-          'Saved Offline', 
-          'Transaction saved locally. It will sync when you\'re back online.'
-        );
-      } else {
-        Alert.alert(
-          'Success', 
-          `Transaction ${editTransaction ? 'updated' : 'saved'} successfully!`
-        );
-      }
-
-      navigation.goBack();
-      
-    } catch (error) {
-      console.error('❌ Error saving transaction:', error);
-      Alert.alert(
-        'Error', 
-        `Failed to save transaction: ${error.message || 'Unknown error'}`
+    if (editTransaction) {
+      console.log('✏️ Updating existing transaction:', editTransaction.id);
+      await transactionController.updateTransaction(
+        editTransaction.id,
+        transactionData,
       );
-    } finally {
-      setIsSaving(false);
+      console.log('✅ Transaction updated successfully');
+    } else {
+      console.log('➕ Adding new transaction');
+      const result = await transactionController.addTransaction(transactionData);
+      console.log('✅ Transaction added successfully:', result);
     }
-  };
+
+    // Show success message
+    if (!isOnline) {
+      Alert.alert(
+        'Saved Offline', 
+        'Transaction saved locally. It will sync when you\'re back online.'
+      );
+    } else {
+      Alert.alert(
+        'Success', 
+        `Transaction ${editTransaction ? 'updated' : 'saved'} successfully!`
+      );
+    }
+
+    console.log('✅ Navigating back');
+    navigation.goBack();
+    
+  } catch (error) {
+    console.error('❌ Error saving transaction:', error);
+    console.error('❌ Error details:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    
+    Alert.alert(
+      'Error', 
+      `Failed to save transaction: ${error.message || 'Unknown error'}`
+    );
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   const handleDeleteCategory = async categoryId => {
     try {
@@ -493,103 +522,6 @@ const AddTransactionScreen = ({route, navigation}) => {
       : filteredCategories.slice(0, 3);
   };
 
-  // ✅ DODANE: Komponenty dla selektora grupy
-  const GroupSelector = () => (
-    <View style={styles.section}>
-      <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
-        Budget Type
-      </Text>
-      <TouchableOpacity
-        style={[
-          styles.groupSelectorButton,
-          {
-            backgroundColor: theme.colors.card,
-            borderColor: isDark
-              ? 'rgba(255,255,255,0.1)'
-              : 'rgba(0,0,0,0.08)',
-            ...theme.shadows.small,
-          },
-        ]}
-        onPress={() => setShowGroupModal(true)}>
-        <View style={styles.groupSelectorContent}>
-          <Icon 
-            name={selectedGroup.isPersonal ? "user" : "users"} 
-            size={20} 
-            color={theme.colors.primary} 
-          />
-          <Text style={[styles.groupSelectorText, {color: theme.colors.text}]}>
-            {selectedGroup.name}
-          </Text>
-        </View>
-        <Icon name="chevron-down" size={20} color={theme.colors.textSecondary} />
-      </TouchableOpacity>
-    </View>
-  );
-
-  const GroupModal = () => (
-    <Modal
-      visible={showGroupModal}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={() => setShowGroupModal(false)}>
-      <View style={styles.modalOverlay}>
-        <View style={[styles.groupModal, {backgroundColor: theme.colors.background}]}>
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
-              Select Budget
-            </Text>
-            <TouchableOpacity
-              onPress={() => setShowGroupModal(false)}
-              style={[styles.modalCloseButton, {backgroundColor: theme.colors.card}]}>
-              <Icon name="x" size={14} color={theme.colors.textSecondary} />
-            </TouchableOpacity>
-          </View>
-          
-          <ScrollView style={styles.groupModalContent}>
-            {userGroups.map(group => (
-              <TouchableOpacity
-                key={group.id}
-                style={[
-                  styles.groupOption,
-                  {
-                    backgroundColor: selectedGroup.id === group.id 
-                      ? theme.colors.primaryLight 
-                      : 'transparent',
-                    borderBottomColor: theme.colors.border,
-                  },
-                ]}
-                onPress={() => {
-                  setSelectedGroup(group);
-                  setShowGroupModal(false);
-                }}>
-                <View style={styles.groupOptionContent}>
-                  <Icon 
-                    name={group.isPersonal ? "user" : "users"} 
-                    size={20} 
-                    color={selectedGroup.id === group.id ? theme.colors.primary : theme.colors.textSecondary} 
-                  />
-                  <Text style={[
-                    styles.groupOptionText, 
-                    {
-                      color: selectedGroup.id === group.id 
-                        ? theme.colors.primary 
-                        : theme.colors.text
-                    }
-                  ]}>
-                    {group.name}
-                  </Text>
-                </View>
-                {selectedGroup.id === group.id && (
-                  <Icon name="check" size={20} color={theme.colors.primary} />
-                )}
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-
   if (loading) {
     return (
       <View
@@ -605,7 +537,7 @@ const AddTransactionScreen = ({route, navigation}) => {
   return (
     <View
       style={[styles.container, {backgroundColor: theme.colors.background}]}>
-      {!isOnline && (
+        {!isOnline && (
         <View style={styles.offlineHeader}>
           <Icon name="wifi-off" size={16} color={theme.colors.warning} />
           <Text style={[styles.offlineText, {color: theme.colors.warning}]}>
@@ -624,10 +556,6 @@ const AddTransactionScreen = ({route, navigation}) => {
             style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             showsVerticalScrollIndicator={false}>
-            
-            {/* ✅ DODANE: Selektor grupy */}
-            <GroupSelector />
-
             {/* Modern Transaction Type Toggle */}
             <View style={styles.section}>
               <View
@@ -889,7 +817,7 @@ const AddTransactionScreen = ({route, navigation}) => {
               </View>
             )}
 
-            {/* ✅ PRZYWRÓCONE: Receipt */}
+            {/* Receipt */}
             <View style={styles.section}>
               <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
                 Receipt
@@ -917,8 +845,16 @@ const AddTransactionScreen = ({route, navigation}) => {
                       },
                     ]}
                     onPress={handleTakePhoto}>
-                    <Icon name="camera" size={16} color={theme.colors.textSecondary} />
-                    <Text style={[styles.receiptButtonText, {color: theme.colors.textSecondary}]}>
+                    <Icon
+                      name="camera"
+                      size={16}
+                      color={theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.receiptButtonText,
+                        {color: theme.colors.textSecondary},
+                      ]}>
                       Camera
                     </Text>
                   </TouchableOpacity>
@@ -935,68 +871,458 @@ const AddTransactionScreen = ({route, navigation}) => {
                       },
                     ]}
                     onPress={handleChooseFromLibrary}>
-                    <Icon name="image" size={16} color={theme.colors.textSecondary} />
-                    <Text style={[styles.receiptButtonText, {color: theme.colors.textSecondary}]}>
+                    <Icon
+                      name="image"
+                      size={16}
+                      color={theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.receiptButtonText,
+                        {color: theme.colors.textSecondary},
+                      ]}>
                       Gallery
                     </Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                <View style={[styles.receiptPreviewCard, {backgroundColor: theme.colors.card}]}>
-                  <Image source={{uri: receiptImage.uri}} style={styles.receiptImage} />
-                  <View style={styles.receiptActions}>
+                <View
+                  style={[
+                    styles.receiptPreviewCard,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: isDark
+                        ? 'rgba(255,255,255,0.1)'
+                        : 'rgba(0,0,0,0.08)',
+                      ...theme.shadows.small,
+                    },
+                  ]}>
+                  <View style={styles.receiptImageContainer}>
+                    <Image
+                      source={{uri: receiptImage.uri}}
+                      style={styles.receiptImage}
+                    />
                     <TouchableOpacity
-                      style={[styles.receiptButton, {backgroundColor: theme.colors.error}]}
+                      style={[
+                        styles.removeImageButton,
+                        {backgroundColor: theme.colors.error},
+                      ]}
                       onPress={() => setReceiptImage(null)}>
-                      <Icon name="trash-2" size={16} color="#FFFFFF" />
-                      <Text style={[styles.receiptButtonText, {color: '#FFFFFF'}]}>
-                        Remove
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.receiptButton, {backgroundColor: theme.colors.primary}]}
-                      onPress={handleAnalyzeReceipt}
-                      disabled={isAnalyzingReceipt}>
-                      {isAnalyzingReceipt ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <>
-                          <Icon name="zap" size={16} color="#FFFFFF" />
-                          <Text style={[styles.receiptButtonText, {color: '#FFFFFF'}]}>
-                            Analyze
-                          </Text>
-                        </>
-                      )}
+                      <Icon name="x" size={10} color="#FFFFFF" />
                     </TouchableOpacity>
                   </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.analyzeButton,
+                      {backgroundColor: theme.colors.success},
+                    ]}
+                    onPress={handleAnalyzeReceipt}
+                    disabled={isAnalyzingReceipt}>
+                    {isAnalyzingReceipt ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Icon name="zap" size={14} color="#FFFFFF" />
+                    )}
+                    <Text style={styles.analyzeButtonText}>
+                      {isAnalyzingReceipt ? 'Analyzing...' : 'Analyze Receipt'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
             </View>
 
-            {/* Save Button */}
-            <View style={styles.saveButtonContainer}>
-              <TouchableOpacity
+            {/* Recurring */}
+            <View style={styles.section}>
+              <View
                 style={[
-                  styles.saveButton,
+                  styles.recurringCard,
                   {
-                    backgroundColor: theme.colors.primary,
-                    ...theme.shadows.medium,
+                    backgroundColor: isDark
+                      ? 'rgba(255,255,255,0.05)'
+                      : theme.colors.card,
+                    borderColor: isDark
+                      ? 'rgba(255,255,255,0.1)'
+                      : 'rgba(0,0,0,0.08)',
+                    ...theme.shadows.small,
                   },
-                ]}
-                onPress={handleSave}
-                disabled={isSaving}>
-                {isSaving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.saveButtonText}>
-                    {editTransaction ? 'Update Transaction' : 'Add Transaction'}
-                  </Text>
+                ]}>
+                <View style={styles.recurringHeader}>
+                  <View style={styles.recurringTitle}>
+                    <Icon
+                      name="repeat"
+                      size={16}
+                      color={theme.colors.textSecondary}
+                    />
+                    <Text
+                      style={[
+                        styles.recurringLabel,
+                        {color: theme.colors.text},
+                      ]}>
+                      Recurring Transaction
+                    </Text>
+                  </View>
+                  <Switch
+                    value={recurring}
+                    onValueChange={setRecurring}
+                    trackColor={{
+                      false: isDark ? '#333' : '#E5E5E5',
+                      true: theme.colors.primary + '40',
+                    }}
+                    thumbColor={
+                      recurring
+                        ? theme.colors.primary
+                        : isDark
+                        ? '#666'
+                        : '#FFF'
+                    }
+                  />
+                </View>
+
+                {recurring && (
+                  <View
+                    style={[
+                      styles.frequencyOptions,
+                      {
+                        borderTopColor: isDark
+                          ? 'rgba(255,255,255,0.1)'
+                          : 'rgba(0,0,0,0.08)',
+                      },
+                    ]}>
+                    <View style={styles.frequencyButtons}>
+                      {[
+                        {key: 'daily', label: 'Daily'},
+                        {key: 'weekly', label: 'Weekly'},
+                        {key: 'monthly', label: 'Monthly'},
+                        {key: 'custom', label: 'Custom'},
+                      ].map(freq => (
+                        <TouchableOpacity
+                          key={freq.key}
+                          style={[
+                            styles.frequencyButton,
+                            {
+                              backgroundColor:
+                                frequency === freq.key
+                                  ? theme.colors.primary
+                                  : isDark
+                                  ? 'rgba(255,255,255,0.08)'
+                                  : 'rgba(0,0,0,0.05)',
+                            },
+                          ]}
+                          onPress={() => setFrequency(freq.key)}>
+                          <Text
+                            style={[
+                              styles.frequencyButtonText,
+                              {
+                                color:
+                                  frequency === freq.key
+                                    ? '#FFFFFF'
+                                    : theme.colors.textSecondary,
+                              },
+                            ]}>
+                            {freq.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {frequency === 'custom' && (
+                      <View style={styles.customFrequency}>
+                        <TextInput
+                          style={[
+                            styles.customInput,
+                            {
+                              backgroundColor: isDark
+                                ? 'rgba(255,255,255,0.08)'
+                                : 'rgba(0,0,0,0.05)',
+                              color: theme.colors.text,
+                              borderColor: isDark
+                                ? 'rgba(255,255,255,0.15)'
+                                : 'rgba(0,0,0,0.1)',
+                            },
+                          ]}
+                          value={customFrequency.times.toString()}
+                          onChangeText={text =>
+                            setCustomFrequency({
+                              ...customFrequency,
+                              times: parseInt(text) || 1,
+                            })
+                          }
+                          keyboardType="number-pad"
+                        />
+                        <Text
+                          style={[
+                            styles.customLabel,
+                            {color: theme.colors.textSecondary},
+                          ]}>
+                          times per
+                        </Text>
+                        <View style={styles.periodButtons}>
+                          {['day', 'week', 'month'].map(period => (
+                            <TouchableOpacity
+                              key={period}
+                              style={[
+                                styles.periodButton,
+                                {
+                                  backgroundColor:
+                                    customFrequency.period === period
+                                      ? theme.colors.primary
+                                      : isDark
+                                      ? 'rgba(255,255,255,0.08)'
+                                      : 'rgba(0,0,0,0.05)',
+                                },
+                              ]}
+                              onPress={() =>
+                                setCustomFrequency({...customFrequency, period})
+                              }>
+                              <Text
+                                style={[
+                                  styles.periodButtonText,
+                                  {
+                                    color:
+                                      customFrequency.period === period
+                                        ? '#FFFFFF'
+                                        : theme.colors.textSecondary,
+                                  },
+                                ]}>
+                                {period}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </View>
+                    )}
+                  </View>
                 )}
-              </TouchableOpacity>
+              </View>
             </View>
+
+            <View style={styles.bottomSpace} />
           </ScrollView>
+
+          {/* Save Button */}
+          <View
+            style={[
+              styles.saveContainer,
+              {backgroundColor: theme.colors.background},
+            ]}>
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                {backgroundColor: theme.colors.primary},
+              ]}
+              onPress={handleSave}
+              disabled={isSaving}>
+              {isSaving ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Icon name="check" size={16} color="#FFFFFF" />
+                  <Text style={styles.saveButtonText}>
+                    {editTransaction ? 'Update' : 'Save'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* Add Category Modal */}
+      <Modal
+        visible={showCategoryModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCategoryModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View
+            style={[styles.modal, {backgroundColor: theme.colors.background}]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                New Category
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowCategoryModal(false)}
+                style={[
+                  styles.modalCloseButton,
+                  {backgroundColor: theme.colors.card},
+                ]}>
+                <Icon name="x" size={14} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent}>
+              {/* Name */}
+              <View style={styles.modalField}>
+                <Text
+                  style={[
+                    styles.modalLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Name
+                </Text>
+                <TextInput
+                  style={[
+                    styles.modalInput,
+                    {
+                      backgroundColor: theme.colors.card,
+                      color: theme.colors.text,
+                      borderColor: isDark
+                        ? 'rgba(255,255,255,0.1)'
+                        : 'rgba(0,0,0,0.08)',
+                    },
+                  ]}
+                  value={newCategoryName}
+                  onChangeText={setNewCategoryName}
+                  placeholder="Category name"
+                  placeholderTextColor={theme.colors.textTertiary}
+                />
+              </View>
+
+              {/* Budget */}
+              <View style={styles.modalField}>
+                <Text
+                  style={[
+                    styles.modalLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Budget (Optional)
+                </Text>
+                <View
+                  style={[
+                    styles.modalAmountContainer,
+                    {
+                      backgroundColor: theme.colors.card,
+                      borderColor: isDark
+                        ? 'rgba(255,255,255,0.1)'
+                        : 'rgba(0,0,0,0.08)',
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.modalCurrency,
+                      {color: theme.colors.primary},
+                    ]}>
+                    {currency.symbol}
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.modalAmountInput,
+                      {color: theme.colors.text},
+                    ]}
+                    value={newCategoryBudget}
+                    onChangeText={setNewCategoryBudget}
+                    placeholder="0.00"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    keyboardType="decimal-pad"
+                  />
+                </View>
+              </View>
+
+              {/* Icons */}
+              <View style={styles.modalField}>
+                <Text
+                  style={[
+                    styles.modalLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Icon
+                </Text>
+                <View style={styles.iconsGrid}>
+                  {AVAILABLE_ICONS.map(icon => (
+                    <TouchableOpacity
+                      key={icon}
+                      style={[
+                        styles.iconButton,
+                        {
+                          backgroundColor:
+                            newCategoryIcon === icon
+                              ? theme.colors.primary
+                              : theme.colors.card,
+                          borderColor: isDark
+                            ? 'rgba(255,255,255,0.1)'
+                            : 'rgba(0,0,0,0.08)',
+                        },
+                      ]}
+                      onPress={() => setNewCategoryIcon(icon)}>
+                      <Icon
+                        name={icon}
+                        size={16}
+                        color={
+                          newCategoryIcon === icon
+                            ? '#FFFFFF'
+                            : theme.colors.textSecondary
+                        }
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Colors */}
+              <View style={styles.modalField}>
+                <Text
+                  style={[
+                    styles.modalLabel,
+                    {color: theme.colors.textSecondary},
+                  ]}>
+                  Color
+                </Text>
+                <View style={styles.colorsGrid}>
+                  {AVAILABLE_COLORS.map(color => (
+                    <TouchableOpacity
+                      key={color}
+                      style={[
+                        styles.colorButton,
+                        {backgroundColor: color},
+                        newCategoryColor === color && styles.selectedColor,
+                      ]}
+                      onPress={() => setNewCategoryColor(color)}>
+                      {newCategoryColor === color && (
+                        <Icon name="check" size={12} color="#FFFFFF" />
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[
+                styles.modalSaveButton,
+                {backgroundColor: theme.colors.primary},
+              ]}
+              onPress={handleAddCategory}
+              disabled={addingCategory}>
+              {addingCategory ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <>
+                  <Icon name="plus" size={16} color="#FFFFFF" />
+                  <Text style={styles.modalSaveButtonText}>
+                    Create Category
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Receipt Analysis Modal */}
+      <ReceiptAnalysisModal
+        visible={showAnalysisModal}
+        onClose={() => setShowAnalysisModal(false)}
+        receiptData={analysisResults}
+        categories={categories}
+        receiptImage={receiptImage}
+        storeName={storeName}
+      />
+    {!isOnline && receiptImage && (
+        <Text style={styles.offlineWarning}>
+          Receipt analysis disabled in offline mode
+        </Text>
+      )}
     </View>
   );
 };
@@ -1008,35 +1334,35 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  content: {
+  flex: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Scroll
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 100,
   },
+
+  // Section
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 12,
+  },
+  optionalText: {
+    fontWeight: '400',
+    fontSize: 13,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1044,163 +1370,311 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  toggleContainer: {
+
+  // Modern Segmented Control
+  segmentedControl: {
     flexDirection: 'row',
     borderRadius: 12,
-    borderWidth: 1,
     padding: 4,
   },
-  toggleButton: {
+  segment: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+    gap: 8,
   },
-  toggleText: {
-    fontSize: 16,
+  segmentActive: {
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  segmentText: {
+    fontSize: 14,
     fontWeight: '600',
   },
+
+  // Amount
   amountContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
-    borderWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 4,
+    borderWidth: 1,
   },
   currency: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     marginRight: 8,
   },
   amountInput: {
     flex: 1,
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '400',
     paddingVertical: 12,
+    textAlign: 'right',
   },
+
+  // Input
   input: {
     borderRadius: 12,
-    borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    fontSize: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    borderWidth: 1,
   },
+
+  // Add Category Button
   addCategoryButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
-    gap: 4,
+    borderRadius: 12,
   },
   addCategoryText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
   },
+
+  // Categories Grid
   categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
+    gap: 8,
   },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 20,
-    borderWidth: 2,
-    gap: 8,
-    minWidth: 100,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    position: 'relative',
   },
-  categoryChipText: {
+  categoryIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  categoryLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  deleteCategoryButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  // Show More Button
+  showMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    marginTop: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    borderStyle: 'dashed',
+    gap: 6,
+    minHeight: 50, // Same height as category chips
+  },
+  showMoreText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+
+  // Receipt
+  receiptActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  receiptButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+  },
+  receiptButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  receiptPreviewCard: {
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    borderWidth: 1,
+  },
+  receiptImageContainer: {
+    position: 'relative',
+  },
+  receiptImage: {
+    width: 60,
+    height: 75,
+    borderRadius: 10,
+    backgroundColor: '#f0f0f0',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  analyzeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 8,
+  },
+  analyzeButtonText: {
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
   },
-  showMoreChip: {
-    minWidth: 80,
+
+  // Recurring
+  recurringCard: {
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
   },
-  saveButtonContainer: {
-    paddingTop: 24,
+  recurringHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  recurringTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  recurringLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  frequencyOptions: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  frequencyButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  frequencyButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  frequencyButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  customFrequency: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  customInput: {
+    width: 60,
+    height: 36,
+    borderRadius: 8,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '600',
+    borderWidth: 1,
+  },
+  customLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  periodButtons: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  periodButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  periodButtonText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  // Save
+  saveContainer: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   saveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 16,
     borderRadius: 12,
-    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   saveButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
+  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
-  modalContainer: {
+  modal: {
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    padding: 24,
     borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
-  },
-  modalContent: {
-    maxHeight: 400,
-  },
-  // ✅ DODANE: Style dla selektora grupy
-  groupSelectorButton: {
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  groupSelectorContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  groupSelectorLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  groupSelectorText: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  groupOption: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-  },
-  groupOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  groupOptionText: {
-    fontSize: 16,
-    fontWeight: '500',
   },
   modalCloseButton: {
     width: 32,
@@ -1208,6 +1682,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  modalContent: {
+    padding: 24,
   },
   modalField: {
     marginBottom: 24,
@@ -1245,6 +1722,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     textAlign: 'right',
   },
+
+  // Icons/Colors
   iconsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1278,6 +1757,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+
+  // Modal Save
   modalSaveButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1292,94 +1773,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  offlineWarning: {
-    color: 'red',
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 12,
-    textAlign: 'center',
-  },
-  offlineHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-  },
-  offlineText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  segmentedControl: {
-    flexDirection: 'row',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 4,
-  },
-  segment: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  segmentActive: {
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  segmentText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  receiptActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-  },
-  receiptButton: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    alignItems: 'center',
-  },
-  receiptButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  receiptPreviewCard: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    padding: 12,
-  },
-  receiptImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  showMoreButton: {
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    alignItems: 'center',
-  },
-  showMoreText: {
-    fontSize: 16,
-    fontWeight: '600',
+
+  bottomSpace: {
+    height: 20,
   },
 });
 
 export default AddTransactionScreen;
-
