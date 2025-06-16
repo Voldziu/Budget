@@ -106,10 +106,17 @@ const HomeScreen = ({navigation}) => {
   // Handle group change
   const handleGroupChange = async (group) => {
     console.log('HomeScreen: Switching to group:', group);
+    
+    // Najpierw ustaw loading
+    setLoading(true);
+    
+    // Ustaw nową grupę
     setSelectedGroup(group);
     
-    // WAŻNE: Natychmiast przeładuj dane dla nowej grupy
+    // Załaduj dane dla nowej grupy
     await loadDataForGroup(group);
+    
+    console.log('HomeScreen: Group change completed for:', group.name);
   };
 
   const loadDataForGroup = async (group = selectedGroup) => {
@@ -424,6 +431,7 @@ const HomeScreen = ({navigation}) => {
               {/* Integrated Budget Group Selector */}
               <View style={styles.integratedGroupSelector}>
                 <BudgetGroupSelector 
+                  key={selectedGroup?.id || 'personal'}
                   onGroupChange={handleGroupChange}
                   compact={true}
                   selectedGroup={selectedGroup}

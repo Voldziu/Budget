@@ -32,6 +32,12 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation, compact = false
     loadPendingInvitations();
   }, []);
 
+  // Add useEffect for selectedGroup synchronization
+  useEffect(() => {
+    // Synchronizuj z rodzicielskim selectedGroup
+    console.log('BudgetGroupSelector received selectedGroup:', selectedGroup);
+  }, [selectedGroup]);
+
   const loadUserGroups = async () => {
     try {
       setLoading(true);
@@ -70,9 +76,10 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation, compact = false
 
   const handleGroupSelect = async (group) => {
     try {
-      console.log('Selecting group:', group);
+      console.log('Selecting group in GroupSelector:', group);
       
-      // Nie zapisuj do AsyncStorage - niech HomeScreen kontroluje stan
+      // NIE zapisuj do AsyncStorage - tylko przekaż do rodzica
+      // await AsyncStorage.setItem('last_selected_group', JSON.stringify(group));
       
       // Call onGroupChange with the selected group
       if (onGroupChange) {
@@ -83,7 +90,7 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation, compact = false
       
       console.log('Group selection completed:', group);
     } catch (error) {
-      console.error('Error selecting group:', error);
+      console.error('Error in group selection:', error);
       Alert.alert('Error', 'Failed to select group');
     }
   };
@@ -182,7 +189,10 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation, compact = false
                 />
                 <Text style={[
                   styles.dropdownItemText,
-                  { color: theme.colors.text }
+                  { 
+                    color: selectedGroup?.id === group.id ? theme.colors.primary : theme.colors.text,
+                    fontWeight: selectedGroup?.id === group.id ? '600' : '500'
+                  }
                 ]}>
                   {group.name}
                 </Text>
