@@ -23,14 +23,19 @@ import Icon from 'react-native-vector-icons/Feather';
 import {OfflineTransactionController} from '../controllers/OfflineTransactionController';
 import {OfflineCategoryController} from '../controllers/OfflineCategoryController';
 import {OfflineBanner} from './components/OfflineBanner';
+import {BudgetGroupSelector} from '../components/BudgetGroupSelector';
+import {BudgetGroupController} from '../controllers/BudgetGroupController';
+
 const TransactionsScreen = ({navigation}) => {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupController] = useState(new BudgetGroupController());
 
   // Filter states
-  const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'income', 'expense'
-  const [dateFilter, setDateFilter] = useState('all'); // 'all', 'month', 'year', 'week'
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showDateDropdown, setShowDateDropdown] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
@@ -59,33 +64,94 @@ const TransactionsScreen = ({navigation}) => {
   ];
 
   useEffect(() => {
-    loadData();
+    const loadInitialData = async () => {
+      try {
+        const defaultGroup = {
+          id: 'personal',
+          name: 'Personal Budget',
+          isPersonal: true,
+        };
+
+        setSelectedGroup(defaultGroup);
+        await loadDataForGroup(defaultGroup);
+      } catch (error) {
+        console.error('Error loading initial data:', error);
+      }
+    };
+
+    loadInitialData();
+
     const unsubscribe = navigation.addListener('focus', () => {
-      loadData();
+      if (selectedGroup) {
+        loadDataForGroup(selectedGroup);
+      } else {
+        loadInitialData();
+      }
     });
     return unsubscribe;
   }, [navigation]);
 
-  const loadData = async () => {
+  const loadDataForGroup = async (group = selectedGroup) => {
+    if (!group) {
+      console.log('loadDataForGroup: No group provided');
+      return;
+    }
+
+    console.log('=== LOADING TRANSACTIONS FOR GROUP ===');
+    console.log('Group ID:', group.id);
+    console.log('Group Name:', group.name);
+    console.log('Is Personal:', group.isPersonal);
+
     setLoading(true);
     try {
-      const allTransactions = await transactionController.getAllTransactions();
+      const groupIdForQuery = (group.isPersonal || group.id === 'personal') ? null : group.id;
+
+      console.log('Using groupId for transactions query:', groupIdForQuery);
+
+      const allTransactions = await transactionController.getAllTransactions(groupIdForQuery);
       const allCategories = await categoryController.getAllCategories();
+
+      console.log('Transactions loaded:', {
+        groupId: groupIdForQuery,
+        transactionCount: allTransactions?.length || 0,
+      });
 
       setTransactions(
         allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)),
       );
       setCategories(allCategories);
 
-      // Reset expanded state
       setExpandedParents({});
       setChildTransactions({});
     } catch (error) {
-      console.error('Error loading transactions:', error);
+      console.error('Error loading transactions for group:', error);
       Alert.alert('Error', 'Failed to load transactions. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadData = async () => {
+    await loadDataForGroup(selectedGroup);
+  };
+
+  const handleGroupChange = async (group) => {
+    console.log('TransactionsScreen: Switching to group:', group);
+
+    if (!group) {
+      console.log('No group provided to handleGroupChange');
+      return;
+    }
+
+    if (selectedGroup && selectedGroup.id === group.id) {
+      console.log('Same group selected, skipping reload');
+      return;
+    }
+
+    setSelectedGroup(group);
+    await loadDataForGroup(group);
+
+    console.log('TransactionsScreen: Group change completed for:', group.name);
   };
 
   const getCategoryById = id => {
@@ -188,9 +254,7 @@ const TransactionsScreen = ({navigation}) => {
     setLoadingChildren({...loadingChildren, [parentId]: true});
 
     try {
-      const children = await transactionController.getChildTransactions(
-        parentId,
-      );
+      const children = await transactionController.getChildTransactions(parentId);
       const enhancedChildren = children.map(child => ({
         ...child,
         categoryName: getCategoryById(child.category).name,
@@ -301,11 +365,82 @@ const TransactionsScreen = ({navigation}) => {
                         dateFilter === option.key
                           ? theme.colors.primary
                           : theme.colors.text,
+                      fontWeight: dateFilter === option.key ? '600' : '500',
                     },
                   ]}>
                   {option.label}
                 </Text>
                 {dateFilter === option.key && (
+                  <Icon name="check" size={18} color={theme.colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
+  const TypeFilterDropdown = () => (
+    <Modal
+      visible={showTypeDropdown}
+      transparent={true}
+      animationType="fade"
+      onRequestClose={() => setShowTypeDropdown(false)}>
+      <TouchableOpacity
+        style={styles.modalOverlay}
+        activeOpacity={1}
+        onPress={() => setShowTypeDropdown(false)}>
+        <View style={styles.dropdownContainer}>
+          <View
+            style={[
+              styles.dropdown,
+              {
+                backgroundColor: theme.colors.card,
+                ...theme.shadows.medium,
+              },
+            ]}>
+            <Text style={[styles.dropdownTitle, {color: theme.colors.text}]}>
+              Select Transaction Type
+            </Text>
+
+            {typeFilterOptions.map(option => (
+              <TouchableOpacity
+                key={option.key}
+                style={[
+                  styles.dropdownOption,
+                  typeFilter === option.key && {
+                    backgroundColor: theme.colors.primaryLight,
+                  },
+                ]}
+                onPress={() => {
+                  setTypeFilter(option.key);
+                  setShowTypeDropdown(false);
+                }}
+                activeOpacity={0.7}>
+                <Icon
+                  name={option.icon}
+                  size={18}
+                  color={
+                    typeFilter === option.key
+                      ? theme.colors.primary
+                      : theme.colors.textSecondary
+                  }
+                />
+                <Text
+                  style={[
+                    styles.dropdownOptionText,
+                    {
+                      color:
+                        typeFilter === option.key
+                          ? theme.colors.primary
+                          : theme.colors.text,
+                      fontWeight: typeFilter === option.key ? '600' : '500',
+                    },
+                  ]}>
+                  {option.label}
+                </Text>
+                {typeFilter === option.key && (
                   <Icon name="check" size={18} color={theme.colors.primary} />
                 )}
               </TouchableOpacity>
@@ -353,15 +488,43 @@ const TransactionsScreen = ({navigation}) => {
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
-            <OfflineBanner />
-      
-
       <SafeAreaView style={styles.safeArea}>
-        {/* Header */}
+        <OfflineBanner />
+
+        {/* Header with title and group selector */}
         <View style={styles.header}>
-          <Text style={[styles.headerTitle, {color: theme.colors.text}]}>
-            Transactions
-          </Text>
+          <View style={styles.headerTop}>
+            <Text style={[styles.headerTitle, {color: theme.colors.text}]}>
+              Transactions
+            </Text>
+
+            <TouchableOpacity
+              style={[
+                styles.addButton,
+                {
+                  backgroundColor: theme.colors.primary,
+                },
+              ]}
+              onPress={() =>
+                navigation.navigate('AddTransaction', {
+                  groupId: selectedGroup?.isPersonal ? null : selectedGroup?.id,
+                })
+              }
+              activeOpacity={0.8}>
+              <Icon name="plus" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Budget Group Selector */}
+          <View style={styles.groupSelectorContainer}>
+            <BudgetGroupSelector
+              key={selectedGroup?.id || 'personal'}
+              onGroupChange={handleGroupChange}
+              compact={true}
+              selectedGroup={selectedGroup}
+              navigation={navigation}
+            />
+          </View>
         </View>
 
         {/* Search Bar */}
@@ -521,142 +684,10 @@ const TransactionsScreen = ({navigation}) => {
       </SafeAreaView>
 
       {/* Date Filter Modal */}
-      <Modal
-        visible={showDateDropdown}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowDateDropdown(false)}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDateDropdown(false)}>
-          <View style={styles.dropdownContainer}>
-            <View
-              style={[
-                styles.dropdown,
-                {
-                  backgroundColor: theme.colors.card,
-                  ...theme.shadows.medium,
-                },
-              ]}>
-              <Text style={[styles.dropdownTitle, {color: theme.colors.text}]}>
-                Select Time Period
-              </Text>
-
-              {dateFilterOptions.map(option => (
-                <TouchableOpacity
-                  key={option.key}
-                  style={[
-                    styles.dropdownOption,
-                    dateFilter === option.key && {
-                      backgroundColor: '#F3F4F6',
-                    },
-                  ]}
-                  onPress={() => {
-                    setDateFilter(option.key);
-                    setShowDateDropdown(false);
-                  }}
-                  activeOpacity={0.7}>
-                  <Icon
-                    name={option.icon}
-                    size={18}
-                    color={
-                      dateFilter === option.key
-                        ? '#3B82F6'
-                        : theme.colors.textSecondary
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.dropdownOptionText,
-                      {
-                        color:
-                          dateFilter === option.key
-                            ? '#3B82F6'
-                            : theme.colors.text,
-                        fontWeight: dateFilter === option.key ? '600' : '500',
-                      },
-                    ]}>
-                    {option.label}
-                  </Text>
-                  {dateFilter === option.key && (
-                    <Icon name="check" size={18} color="#3B82F6" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <DateFilterDropdown />
 
       {/* Type Filter Modal */}
-      <Modal
-        visible={showTypeDropdown}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowTypeDropdown(false)}>
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowTypeDropdown(false)}>
-          <View style={styles.dropdownContainer}>
-            <View
-              style={[
-                styles.dropdown,
-                {
-                  backgroundColor: theme.colors.card,
-                  ...theme.shadows.medium,
-                },
-              ]}>
-              <Text style={[styles.dropdownTitle, {color: theme.colors.text}]}>
-                Select Transaction Type
-              </Text>
-
-              {typeFilterOptions.map(option => (
-                <TouchableOpacity
-                  key={option.key}
-                  style={[
-                    styles.dropdownOption,
-                    typeFilter === option.key && {
-                      backgroundColor: '#F3F4F6',
-                    },
-                  ]}
-                  onPress={() => {
-                    setTypeFilter(option.key);
-                    setShowTypeDropdown(false);
-                  }}
-                  activeOpacity={0.7}>
-                  <Icon
-                    name={option.icon}
-                    size={18}
-                    color={
-                      typeFilter === option.key
-                        ? '#3B82F6'
-                        : theme.colors.textSecondary
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.dropdownOptionText,
-                      {
-                        color:
-                          typeFilter === option.key
-                            ? '#3B82F6'
-                            : theme.colors.text,
-                        fontWeight: typeFilter === option.key ? '600' : '500',
-                      },
-                    ]}>
-                    {option.label}
-                  </Text>
-                  {typeFilter === option.key && (
-                    <Icon name="check" size={18} color="#3B82F6" />
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      <TypeFilterDropdown />
     </View>
   );
 };
@@ -696,12 +727,30 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 16,
+    paddingBottom: 8,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   headerTitle: {
     fontSize: 32,
     fontWeight: '700',
     letterSpacing: -0.5,
+    flex: 1,
+  },
+  addButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 16,
+  },
+  groupSelectorContainer: {
+    marginBottom: 8,
   },
 
   // Search
@@ -715,6 +764,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 12,
     paddingHorizontal: 16,
+    borderWidth: 1,
   },
   searchIcon: {
     marginRight: 12,
@@ -784,58 +834,50 @@ const styles = StyleSheet.create({
   },
   dropdownOptionText: {
     fontSize: 16,
-    fontWeight: '500',
     flex: 1,
   },
 
   // Summary
   summaryContainer: {
     paddingHorizontal: 24,
-    paddingBottom: 20,
+    marginBottom: 16,
   },
   summaryText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '500',
   },
 
   // Transactions
   transactionsContainer: {
     marginHorizontal: 24,
-    borderRadius: 20,
+    borderRadius: 16,
     overflow: 'hidden',
     marginBottom: 24,
-    marginTop: 4,
   },
   separator: {
     height: 1,
-    marginHorizontal: 0,
+    marginHorizontal: 20,
   },
 
   // Empty State
   emptyContainer: {
+    paddingVertical: 60,
+    paddingHorizontal: 40,
     alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 32,
   },
   emptyIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 32,
+    lineHeight: 20,
   },
 
   bottomPadding: {
