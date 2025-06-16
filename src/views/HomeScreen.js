@@ -66,7 +66,13 @@ const HomeScreen = ({navigation}) => {
       loadData();
     });
     return unsubscribe;
-  }, [navigation, selectedGroup]); // Dodałem selectedGroup jako zależność
+  }, [navigation]);
+
+  useEffect(() => {
+    if (selectedGroup) {
+      loadData();
+    }
+  }, [selectedGroup.id]);
 
   const loadData = async () => {
     setLoading(true);
@@ -125,11 +131,9 @@ const HomeScreen = ({navigation}) => {
     }
   };
 
-  // Dodaj funkcję obsługi zmiany grupy
   const handleGroupChange = (group) => {
     console.log('Switching to group:', group);
     setSelectedGroup(group);
-    // loadData zostanie wywołane automatycznie przez useEffect
   };
 
   useEffect(() => {
@@ -224,67 +228,42 @@ const HomeScreen = ({navigation}) => {
     }
   };
 
-  const renderTransaction = (transaction, index) => {
-    const isLast = index === recentTransactions.length - 1;
-
-    if (transaction.is_parent) {
+  const renderTransaction = item => {
+    if (item.is_parent) {
       return (
-        <View key={transaction.id.toString()}>
-          <TransactionGroupItem
-            transaction={transaction}
-            onPress={() =>
-              navigation.navigate('TransactionDetail', {id: transaction.id})
-            }
-            onExpand={() => handleExpandParent(transaction.id)}
-            isExpanded={!!expandedParents[transaction.id]}
-            childTransactions={childTransactions[transaction.id] || []}
-            isLoading={!!loadingChildren[transaction.id]}
-          />
-          {!isLast && (
-            <View
-              style={[
-                styles.transactionSeparator,
-                {backgroundColor: theme.colors.border + '30'},
-              ]}
-            />
-          )}
-        </View>
+        <TransactionGroupItem
+          key={item.id}
+          transaction={item}
+          onPress={() =>
+            navigation.navigate('TransactionDetail', {id: item.id})
+          }
+          onExpand={() => handleExpandParent(item.id)}
+          isExpanded={!!expandedParents[item.id]}
+          childTransactions={childTransactions[item.id] || []}
+          isLoading={!!loadingChildren[item.id]}
+        />
       );
     }
 
     return (
-      <View key={transaction.id.toString()}>
-        <TransactionItem
-          transaction={transaction}
-          category={getCategoryById(transaction.category)}
-          onPress={() =>
-            navigation.navigate('TransactionDetail', {id: transaction.id})
-          }
-        />
-        {!isLast && (
-          <View
-            style={[
-              styles.transactionSeparator,
-              {backgroundColor: theme.colors.border + '30'},
-            ]}
-          />
-        )}
-      </View>
+      <TransactionItem
+        key={item.id}
+        transaction={item}
+        category={getCategoryById(item.category)}
+        onPress={() => navigation.navigate('TransactionDetail', {id: item.id})}
+      />
     );
   };
 
-  // Gradient colors for balance card
   const getBalanceGradientColors = () => {
     const balance = getCurrentBalance();
-    const isPositive = balance >= 0;
-
-    if (isDark) {
-      return isPositive
-        ? ['#1a4d3a', '#0d2818', '#071912', '#0d2818'] // Dark green gradient
-        : ['#4d1a1a', '#280d0d', '#190707', '#280d0d']; // Dark red gradient
+    if (balance >= 0) {
+      return isDark
+        ? ['#1B5E20', '#2E7D32', '#388E3C', '#2E7D32'] // Dark green gradient
+        : ['#e8f5e8', '#f0f9f0', '#f8fcf8', '#f0f9f0']; // Light green gradient
     } else {
-      return isPositive
-        ? ['#e8f5e8', '#f0f9f0', '#f8fcf8', '#f0f9f0'] // Light green gradient
+      return isDark
+        ? ['#B71C1C', '#C62828', '#D32F2F', '#C62828'] // Dark red gradient
         : ['#fde8e8', '#fef0f0', '#fff8f8', '#fef0f0']; // Light red gradient
     }
   };
@@ -320,358 +299,268 @@ const HomeScreen = ({navigation}) => {
   const isPositive = balance >= 0;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.container, {backgroundColor: theme.colors.background}]}>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={theme.colors.background}
       />
-      
-      {/* Offline Banner */}
       <OfflineBanner />
-      
-      {/* Group Selector - DODAJ TO */}
+
       <BudgetGroupSelector onGroupChange={handleGroupChange} />
 
-      {/* Reszta zawartości HomeScreen... */}
-      <ScrollView style={styles.content}>
-        {/* Greeting Section */}
-        <View style={styles.greetingContainer}>
-          <View style={styles.greetingLeft}>
-            <Text style={[styles.greeting, {color: theme.colors.textSecondary}]}>
-              {getGreeting()}
-            </Text>
-            <Text style={[styles.userName, {color: theme.colors.text}]}>
-              Welcome back!
-            </Text>
-          </View>
-          
-          <TouchableOpacity
-            style={[styles.groupButton, { backgroundColor: theme.colors.primary }]}
-            onPress={() => navigation.navigate('GroupManagement')}
-          >
-            <Text style={styles.groupButtonText}>Manage Groups</Text>
-          </TouchableOpacity>
+      {syncStatus && (
+        <View style={[
+          styles.syncBanner, 
+          { 
+            backgroundColor: syncStatus === 'error' 
+              ? theme.colors.error 
+              : syncStatus === 'success' 
+                ? theme.colors.success 
+                : theme.colors.primary 
+          }
+        ]}>
+          <Text style={styles.syncText}>
+            {syncStatus === 'syncing' && 'Syncing data...'}
+            {syncStatus === 'success' && 'Data synced successfully!'}
+            {syncStatus === 'error' && 'Sync failed. Will retry later.'}
+          </Text>
         </View>
-        
-        {/* Summary Cards */}
-        <View style={styles.balanceCardContainer}>
-          <LinearGradient
-            colors={getBalanceGradientColors()}
-            style={[
-              styles.balanceCard,
-              {
-                borderColor: isDark
-                  ? 'rgba(255, 255, 255, 0.1)'
-                  : 'rgba(0, 0, 0, 0.05)',
-              },
-            ]}
-            start={{x: 0, y: 0}}
-            end={{x: 1, y: 1}}>
-            {/* Glassmorphism overlay */}
-            <View
-              style={[
-                styles.glassOverlay,
-                {
-                  backgroundColor: isDark
-                    ? 'rgba(255, 255, 255, 0.05)'
-                    : 'rgba(255, 255, 255, 0.7)',
-                },
-              ]}>
-              {/* Header */}
-              <View style={styles.balanceHeader}>
-                <View
-                  style={[
-                    styles.balanceIconContainer,
-                    {
-                      backgroundColor: isPositive
-                        ? theme.colors.success + '20'
-                        : theme.colors.error + '20',
-                      borderColor: isPositive
-                        ? theme.colors.success + '30'
-                        : theme.colors.error + '30',
-                    },
-                  ]}>
-                  <Icon
-                    name={isPositive ? 'trending-up' : 'trending-down'}
-                    size={22}
-                    color={
-                      isPositive ? theme.colors.success : theme.colors.error
-                    }
-                  />
-                </View>
+      )}
+
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces={true}>
+          <View style={styles.header}>
+            <View style={styles.headerContent}>
+              <View style={styles.greetingContainer}>
                 <Text
                   style={[
-                    styles.balanceLabel,
+                    styles.greeting,
                     {color: theme.colors.textSecondary},
                   ]}>
-                  Total Balance
+                  {getGreeting()}
+                </Text>
+                <Text style={[styles.userName, {color: theme.colors.text}]}>
+                  Welcome back
                 </Text>
               </View>
 
-              {/* Main Balance */}
-              <Text
+              <TouchableOpacity
                 style={[
-                  styles.balance,
+                  styles.profileButton,
                   {
-                    color: isPositive
-                      ? theme.colors.success
-                      : theme.colors.error,
+                    backgroundColor: isDark
+                      ? 'rgba(255,255,255,0.1)'
+                      : 'rgba(0,0,0,0.05)',
+                    ...theme.shadows.small,
+                  },
+                ]}
+                onPress={() => navigation.navigate('GroupManagement')}>
+                <Icon name="users" size={22} color={theme.colors.primary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.balanceCardContainer}>
+            <LinearGradient
+              colors={getBalanceGradientColors()}
+              style={[
+                styles.balanceCard,
+                {
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
+              ]}
+              start={{x: 0, y: 0}}
+              end={{x: 1, y: 1}}>
+              <View
+                style={[
+                  styles.glassOverlay,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : 'rgba(255, 255, 255, 0.7)',
                   },
                 ]}>
-                {formatAmount(balance)}
-              </Text>
-
-              {/* Status */}
-              <View style={styles.balanceStatus}>
-                <View
-                  style={[
-                    styles.statusIndicator,
-                    {
-                      backgroundColor: isPositive
-                        ? theme.colors.success
-                        : theme.colors.error,
-                    },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.statusText,
-                    {color: theme.colors.textSecondary},
-                  ]}>
-                  {isPositive
-                    ? "You're doing great!"
-                    : 'Review your expenses'}
-                </Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
-
-        {/* Quick Stats with Glassmorphism */}
-        <View style={styles.statsContainer}>
-          <TouchableOpacity
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: isDark
-                  ? 'rgba(255, 255, 255, 0.05)'
-                  : 'rgba(255, 255, 255, 0.8)',
-                borderColor: isDark
-                  ? 'rgba(255, 255, 255, 0.1)'
-                  : 'rgba(0, 0, 0, 0.05)',
-              },
-            ]}
-            onPress={() => navigation.navigate('Budget')}
-            activeOpacity={0.8}>
-            <LinearGradient
-              colors={
-                isDark
-                  ? ['rgba(76, 175, 80, 0.1)', 'rgba(76, 175, 80, 0.05)']
-                  : ['rgba(76, 175, 80, 0.05)', 'rgba(76, 175, 80, 0.02)']
-              }
-              style={styles.statGradient}>
-              <View style={styles.statIcon}>
-                <View
-                  style={[
-                    styles.statIconCircle,
-                    {backgroundColor: theme.colors.success + '20'},
-                  ]}>
-                  <Icon
-                    name="trending-up"
-                    size={20}
-                    color={theme.colors.success}
-                  />
+                <View style={styles.balanceContent}>
+                  <Text
+                    style={[
+                      styles.balanceLabel,
+                      {color: isDark ? '#FFFFFF' : theme.colors.text},
+                    ]}>
+                    Current Balance
+                  </Text>
+                  <Text
+                    style={[
+                      styles.balanceAmount,
+                      {
+                        color: isDark ? '#FFFFFF' : theme.colors.text,
+                        fontSize: getDynamicFontSize(balance),
+                      },
+                    ]}>
+                    {formatAmount(balance)}
+                  </Text>
                 </View>
               </View>
-
-              <View style={styles.statContent}>
-                <Text
-                  style={[
-                    styles.statLabel,
-                    {color: theme.colors.textSecondary},
-                  ]}>
-                  Income
-                </Text>
-                <Text
-                  style={[
-                    {
-                      fontSize: getDynamicFontSize(summary?.totalIncome || 0),
-                      fontWeight: '700',
-                      color: theme.colors.success,
-                    },
-                  ]}>
-                  +{formatAmount(summary?.totalIncome || 0)}
-                </Text>
-                <Text
-                  style={[
-                    styles.statSubtext,
-                    {color: theme.colors.textTertiary},
-                  ]}>
-                  This month
-                </Text>
-              </View>
             </LinearGradient>
-          </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: isDark
-                  ? 'rgba(255, 255, 255, 0.05)'
-                  : 'rgba(255, 255, 255, 0.8)',
-                borderColor: isDark
-                  ? 'rgba(255, 255, 255, 0.1)'
-                  : 'rgba(0, 0, 0, 0.05)',
-              },
-            ]}
-            onPress={() => navigation.navigate('Budget')}
-            activeOpacity={0.8}>
-            <LinearGradient
-              colors={
-                isDark
-                  ? ['rgba(244, 67, 54, 0.1)', 'rgba(244, 67, 54, 0.05)']
-                  : ['rgba(244, 67, 54, 0.05)', 'rgba(244, 67, 54, 0.02)']
-              }
-              style={styles.statGradient}>
-              <View style={styles.statIcon}>
-                <View
-                  style={[
-                    styles.statIconCircle,
-                    {backgroundColor: theme.colors.error + '20'},
-                  ]}>
-                  <Icon
-                    name="trending-down"
-                    size={20}
-                    color={theme.colors.error}
-                  />
-                </View>
-              </View>
-
-              <View style={styles.statContent}>
-                <Text
-                  style={[
-                    styles.statLabel,
-                    {color: theme.colors.textSecondary},
-                  ]}>
-                  Expenses
-                </Text>
-                <Text
-                  style={[
-                    {
-                      fontSize: getDynamicFontSize(
-                        summary?.totalExpenses || 0,
-                      ),
-                      fontWeight: '700',
-                      color: theme.colors.error,
-                    },
-                  ]}>
-                  -{formatAmount(summary?.totalExpenses || 0)}
-                </Text>
-                <Text
-                  style={[
-                    styles.statSubtext,
-                    {color: theme.colors.textTertiary},
-                  ]}>
-                  This month
-                </Text>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
-
-        {/* Recent Transactions with Glassmorphism */}
-        <View style={styles.transactionsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
-              Recent Activity
-            </Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('Transactions')}
+          <View style={styles.summaryRow}>
+            <View
               style={[
-                styles.viewAllButton,
+                styles.summaryCard,
                 {
-                  backgroundColor: isDark
-                    ? 'rgba(255, 255, 255, 0.05)'
-                    : 'rgba(0, 0, 0, 0.03)',
+                  backgroundColor: theme.colors.card,
+                  ...theme.shadows.medium,
                 },
               ]}>
-              <Text
-                style={[styles.viewAllText, {color: theme.colors.primary}]}>
-                View all
+              <View
+                style={[styles.summaryIcon, {backgroundColor: '#E8F5E8'}]}>
+                <Icon name="trending-up" size={20} color="#4CAF50" />
+              </View>
+              <Text style={[styles.summaryLabel, {color: theme.colors.text}]}>
+                Income
               </Text>
-              <Icon
-                name="chevron-right"
-                size={16}
-                color={theme.colors.primary}
-              />
+              <Text
+                style={[
+                  styles.summaryAmount,
+                  {
+                    color: '#4CAF50',
+                    fontSize: getDynamicFontSize(summary?.totalIncome || 0),
+                  },
+                ]}>
+                {formatAmount(summary?.totalIncome || 0)}
+              </Text>
+            </View>
+
+            <View
+              style={[
+                styles.summaryCard,
+                {
+                  backgroundColor: theme.colors.card,
+                  ...theme.shadows.medium,
+                },
+              ]}>
+              <View
+                style={[styles.summaryIcon, {backgroundColor: '#FFF3E0'}]}>
+                <Icon name="trending-down" size={20} color="#FF9800" />
+              </View>
+              <Text style={[styles.summaryLabel, {color: theme.colors.text}]}>
+                Expenses
+              </Text>
+              <Text
+                style={[
+                  styles.summaryAmount,
+                  {
+                    color: '#FF9800',
+                    fontSize: getDynamicFontSize(summary?.totalExpenses || 0),
+                  },
+                ]}>
+                {formatAmount(summary?.totalExpenses || 0)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.sectionContainer}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
+                Recent Transactions
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Transactions')}
+                style={styles.seeAllButton}>
+                <Text
+                  style={[
+                    styles.seeAllText,
+                    {color: theme.colors.primary},
+                  ]}>
+                  See all
+                </Text>
+                <Icon
+                  name="arrow-right"
+                  size={16}
+                  color={theme.colors.primary}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.transactionsContainer}>
+              {recentTransactions.length > 0 ? (
+                recentTransactions.map(renderTransaction)
+              ) : (
+                <View
+                  style={[
+                    styles.emptyContainer,
+                    {backgroundColor: theme.colors.card},
+                  ]}>
+                  <View
+                    style={[
+                      styles.emptyIcon,
+                      {backgroundColor: theme.colors.primaryLight},
+                    ]}>
+                    <Icon
+                      name="credit-card"
+                      size={32}
+                      color={theme.colors.primary}
+                    />
+                  </View>
+                  <Text
+                    style={[styles.emptyTitle, {color: theme.colors.text}]}>
+                    No transactions yet
+                  </Text>
+                  <Text
+                    style={[
+                      styles.emptySubtitle,
+                      {color: theme.colors.textSecondary},
+                    ]}>
+                    Start by adding your first transaction to track your finances
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.emptyButton,
+                      {backgroundColor: theme.colors.primary},
+                    ]}
+                    onPress={() =>
+                      navigation.navigate('AddTransaction', { selectedGroup })
+                    }>
+                    <Text style={styles.emptyButtonText}>Add Transaction</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.quickActionsContainer}>
+            <TouchableOpacity
+              style={[
+                styles.quickActionButton,
+                {
+                  backgroundColor: theme.colors.primary,
+                  ...theme.shadows.medium,
+                },
+              ]}
+              onPress={() =>
+                navigation.navigate('AddTransaction', { selectedGroup })
+              }>
+              <Icon name="plus" size={24} color="#FFFFFF" />
+              <Text style={styles.quickActionText}>Add Transaction</Text>
             </TouchableOpacity>
           </View>
 
-          <View
-            style={[
-              styles.transactionsCard,
-              {
-                backgroundColor: theme.colors.card,
-                ...theme.shadows.medium,
-              },
-            ]}>
-            {recentTransactions.length > 0 ? (
-              recentTransactions.map((transaction, index) =>
-                renderTransaction(transaction, index),
-              )
-            ) : (
-              <View style={styles.emptyState}>
-                <View
-                  style={[
-                    styles.emptyIcon,
-                    {
-                      backgroundColor: isDark
-                        ? 'rgba(255, 255, 255, 0.1)'
-                        : 'rgba(0, 0, 0, 0.05)',
-                    },
-                  ]}>
-                  <Icon
-                    name="activity"
-                    size={32}
-                    color={theme.colors.textTertiary}
-                  />
-                </View>
-                <Text style={[styles.emptyTitle, {color: theme.colors.text}]}>
-                  No transactions yet
-                </Text>
-                <Text
-                  style={[
-                    styles.emptySubtitle,
-                    {color: theme.colors.textSecondary},
-                  ]}>
-                  Start tracking your finances by adding your first
-                  transaction
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.emptyButton,
-                    {backgroundColor: theme.colors.primary},
-                  ]}
-                  onPress={() => navigation.navigate('AddTransaction')}>
-                  <Text style={styles.emptyButtonText}>Add Transaction</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.bottomPadding} />
-      </ScrollView>
-    </SafeAreaView>
+          <View style={styles.bottomPadding} />
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-  },
-  safeArea: {
     flex: 1,
   },
   loadingContainer: {
@@ -688,27 +577,12 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   loadingText: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '500',
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
-
-  // Group Selector
-  groupSelectorContainer: {
-    paddingHorizontal: 24,
-    paddingTop: 10,
-    paddingBottom: 5,
-  },
-
-  // Sync Banner
   syncBanner: {
     paddingVertical: 8,
     paddingHorizontal: 16,
@@ -717,14 +591,21 @@ const styles = StyleSheet.create({
   syncText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
   },
-
-  // Header
+  safeArea: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
   header: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 28,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
   },
   headerContent: {
     flexDirection: 'row',
@@ -734,133 +615,80 @@ const styles = StyleSheet.create({
   greetingContainer: {
     flex: 1,
   },
-  greetingLeft: {
-    flex: 1,
-  },
   greeting: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 6,
-    letterSpacing: 0.3,
+    fontSize: 14,
+    marginBottom: 4,
   },
   userName: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
-    letterSpacing: -0.5,
   },
   profileButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
   },
-
-  // Balance Card with Glassmorphism
   balanceCardContainer: {
-    marginHorizontal: 24,
-    marginBottom: 28,
-  },
-  balanceCard: {
-    borderRadius: 28,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  glassOverlay: {
-    padding: 28,
-    borderRadius: 28,
-  },
-  balanceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: 20,
     marginBottom: 20,
   },
-  balanceIconContainer: {
+  balanceCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  glassOverlay: {
+    padding: 32,
+    borderRadius: 20,
+  },
+  balanceContent: {
+    alignItems: 'center',
+  },
+  balanceLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  balanceAmount: {
+    fontSize: 32,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    marginBottom: 24,
+    gap: 12,
+  },
+  summaryCard: {
+    flex: 1,
+    padding: 20,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  summaryIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
-    borderWidth: 1,
+    marginBottom: 12,
   },
-  balanceLabel: {
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+  summaryLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
   },
-  balance: {
-    fontSize: 52,
-    fontWeight: '300',
-    letterSpacing: -2,
-    marginBottom: 16,
+  summaryAmount: {
+    fontSize: 18,
+    fontWeight: '700',
     textAlign: 'center',
   },
-  balanceStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 10,
-  },
-  statusText: {
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-
-  // Stats with Glassmorphism
-  statsContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    gap: 16,
-    marginBottom: 28,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  statGradient: {
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statIcon: {
-    marginRight: 16,
-  },
-  statIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  statContent: {
-    flex: 1,
-  },
-  statLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 6,
-    letterSpacing: 0.3,
-  },
-  statSubtext: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-    letterSpacing: 0.2,
-  },
-
-  // Transactions with Glassmorphism
-  transactionsSection: {
-    paddingHorizontal: 24,
+  sectionContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -869,84 +697,75 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
-    letterSpacing: -0.3,
   },
-  viewAllButton: {
+  seeAllButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
+    gap: 4,
   },
-  viewAllText: {
-    fontSize: 15,
+  seeAllText: {
+    fontSize: 14,
     fontWeight: '600',
   },
-  transactionsCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    // borderWidth: 1,
+  transactionsContainer: {
+    gap: 8,
   },
-  transactionSeparator: {
-    height: 1,
-    marginHorizontal: 0,
-  },
-
-  // Empty State
-  emptyState: {
+  emptyContainer: {
+    padding: 40,
+    borderRadius: 16,
     alignItems: 'center',
-    padding: 48,
   },
   emptyIcon: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginBottom: 10,
-    letterSpacing: -0.3,
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 16,
     textAlign: 'center',
     lineHeight: 24,
-    marginBottom: 28,
-    letterSpacing: 0.2,
+    marginBottom: 24,
   },
   emptyButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
   },
   emptyButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '600',
   },
-
-  bottomPadding: {
-    height: 32,
+  quickActionsContainer: {
+    paddingHorizontal: 20,
+    marginBottom: 24,
   },
-
-  groupButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 28,
+  quickActionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
     borderRadius: 16,
+    gap: 8,
   },
-  groupButtonText: {
+  quickActionText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontWeight: '600',
+  },
+  bottomPadding: {
+    height: 32,
   },
 });
 
