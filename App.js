@@ -37,6 +37,17 @@ const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 const AuthStack = createStackNavigator();
 
+if (!Array.prototype.findLastIndex) {
+  Array.prototype.findLastIndex = function(predicate, thisArg) {
+    for (let i = this.length - 1; i >= 0; i--) {
+      if (predicate.call(thisArg, this[i], i, this)) {
+        return i;
+      }
+    }
+    return -1;
+  };
+}
+
 // Custom Floating Action Button
 const FloatingActionButton = ({onPress, theme}) => {
   const scaleValue = useRef(new Animated.Value(1)).current;
