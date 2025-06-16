@@ -235,4 +235,74 @@ export class SupabaseBudgetController {
       throw error;
     }
   }
+
+  // Dodaj do SupabaseBudgetController
+async getGroupSpendingSummary(groupId, month, year) {
+  try {
+    console.log(`Generating group spending summary for group ${groupId}, ${month}/${year}`);
+    
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0);
+    
+    // Pobierz transakcje grupy
+    const { data: transactions, error } = await supabase
+      .from(TABLES.TRANSACTIONS)
+      .select('*')
+      .eq('group_id', groupId)
+      .gte('date', startDate.toISOString())
+      .lte('date', endDate.toISOString());
+
+    if (error) throw error;
+
+    // Pobierz budżet grupy
+    const { data: groupBudget } = await supabase
+      .from(TABLES.BUDGETS)
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('month', month)
+      .eq('year', year)
+      .eq('is_group_budget', true)
+      .single();
+
+    // Reszta logiki podobna do getSpendingSummary
+    // ale operuje na transakcjach grupy
+    
+    return summary;
+  } catch (error) {
+    console.error('Error generating group spending summary:', error);
+    throw error;
+  }
+}
+
+async setGroupBudget(groupId, budget) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Sprawdź czy użytkownik ma uprawnienia do grupy
+    const hasPermission = await this.checkGroupPermission(groupId, user.id, ['admin']);
+    if (!hasPermission) throw new Error('Insufficient permissions');
+
+    const budgetData = {
+      ...budget,
+      group_id: groupId,
+      is_group_budget: true,
+      user_id: user.id // kto ustawił budżet
+    };
+
+    const { data, error } = await supabase
+      .from(TABLES.BUDGETS)
+      .upsert(budgetData, {
+        onConflict: 'group_id,month,year'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error setting group budget:', error);
+    throw error;
+  }
+}
 }

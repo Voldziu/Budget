@@ -197,4 +197,35 @@ export class TransactionController {
     
     return calculatedTransactions;
   }
+
+  // W SupabaseTransactionController.js
+async addGroupTransaction(transaction, groupId) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Sprawdź czy użytkownik należy do grupy
+    const hasAccess = await this.checkGroupAccess(groupId, user.id);
+    if (!hasAccess) throw new Error('No access to this group');
+
+    const transactionData = {
+      ...transaction,
+      group_id: groupId,
+      user_id: user.id,
+      created_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from(TABLES.TRANSACTIONS)
+      .insert(transactionData)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error adding group transaction:', error);
+    throw error;
+  }
+}
 }
