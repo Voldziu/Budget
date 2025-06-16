@@ -29,7 +29,6 @@ import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 import { BudgetGroupSelector } from '../components/BudgetGroupSelector';
 import { BudgetGroupController } from '../controllers/BudgetGroupController';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const {width, height} = Dimensions.get('window');
 
@@ -64,12 +63,6 @@ const HomeScreen = ({navigation}) => {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        // Get last selected group from storage
-        const lastSelectedGroup = await AsyncStorage.getItem('last_selected_group');
-        if (lastSelectedGroup) {
-          const parsedGroup = JSON.parse(lastSelectedGroup);
-          setSelectedGroup(parsedGroup);
-        }
         await loadData();
       } catch (error) {
         console.error('Error loading initial data:', error);
@@ -84,19 +77,20 @@ const HomeScreen = ({navigation}) => {
     return unsubscribe;
   }, [navigation]);
 
+  // Add new useEffect to handle group changes
+  useEffect(() => {
+    if (selectedGroup && !loading) {
+      console.log('Group changed, reloading data for:', selectedGroup.name);
+      loadData();
+    }
+  }, [selectedGroup]);
+
   // Handle group change
   const handleGroupChange = async (group) => {
     console.log('Switching to group:', group);
     setSelectedGroup(group);
-    // Save selected group to storage
-    try {
-      await AsyncStorage.setItem('last_selected_group', JSON.stringify(group));
-      // Load data for the selected group
-      await loadData();
-    } catch (error) {
-      console.error('Error handling group change:', error);
-      Alert.alert('Error', 'Failed to switch group');
-    }
+    // Load data for the selected group
+    await loadData();
   };
 
   const loadData = async () => {

@@ -356,4 +356,39 @@ export class SupabaseBudgetController {
       throw error;
     }
   }
+
+  async getGroupBudget(groupId, month, year) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź czy użytkownik należy do grupy
+      const { data: membership, error: membershipError } = await supabase
+        .from('budget_group_members')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (membershipError || !membership) {
+        console.error('No access to group:', groupId);
+        return null;
+      }
+
+      const { data: budget, error } = await supabase
+        .from(TABLES.BUDGETS)
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('month', month)
+        .eq('year', year)
+        .eq('is_group_budget', true)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      return budget;
+    } catch (error) {
+      console.error('Error getting group budget:', error);
+      return null;
+    }
+  }
 }
