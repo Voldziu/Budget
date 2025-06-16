@@ -14,3 +14,5 @@ def read_receipt(image_path):
 if __name__ == '__main__':
     result = read_receipt("1.jpg")
     print(result)
+
+

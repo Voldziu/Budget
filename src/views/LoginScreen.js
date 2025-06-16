@@ -10,9 +10,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  Image,
+  SafeAreaView,
+  StatusBar,
+  Dimensions,
 } from 'react-native';
+import LinearGradient from 'react-native-linear-gradient';
+import Icon from 'react-native-vector-icons/Feather';
 import {AuthService} from '../services/AuthService';
+import {useTheme} from '../utils/ThemeContext';
+
+const {width, height} = Dimensions.get('window');
 
 const LoginScreen = ({navigation}) => {
   const [email, setEmail] = useState('');
@@ -21,6 +28,7 @@ const LoginScreen = ({navigation}) => {
   const [isLogin, setIsLogin] = useState(true);
   const [initialCheck, setInitialCheck] = useState(true);
 
+  const {theme, isDark} = useTheme();
   const authService = new AuthService();
 
   // Check if user is already authenticated
@@ -111,159 +119,272 @@ const LoginScreen = ({navigation}) => {
     }
   };
 
+  const getBackgroundGradient = () => {
+    if (isDark) {
+      return ['#0a0a0a', '#1a1a1a', '#2a2a2a'];
+    } else {
+      return ['#f8f9fa', '#ffffff', '#f0f4f8'];
+    }
+  };
+
   if (initialCheck) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
+      <LinearGradient colors={getBackgroundGradient()} style={styles.container}>
+        <StatusBar
+          barStyle={isDark ? 'light-content' : 'dark-content'}
+          backgroundColor="transparent"
+          translucent
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <View style={styles.formContainer}>
-        <View style={styles.logoContainer}>
-          <Text style={styles.appName}>Budget Tracker</Text>
-        </View>
+    <LinearGradient colors={getBackgroundGradient()} style={styles.container}>
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor="transparent"
+        translucent
+      />
+      
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          style={styles.keyboardContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          
+          <View style={styles.content}>
+            {/* Logo and Title */}
+            <View style={styles.header}>
+              <View
+                style={[
+                  styles.logoContainer,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(255, 255, 255, 0.1)'
+                      : 'rgba(255, 255, 255, 0.9)',
+                  },
+                ]}>
+                <Icon name="trending-up" size={24} color={theme.colors.primary} />
+              </View>
+              
+              <Text style={[styles.appName, {color: theme.colors.text}]}>
+                Budget Tracker
+              </Text>
+              
+              <Text style={[styles.headerText, {color: theme.colors.text}]}>
+                {isLogin ? 'Welcome back' : 'Create account'}
+              </Text>
+            </View>
 
-        <Text style={styles.headerText}>
-          {isLogin ? 'Sign in to your account' : 'Create a new account'}
-        </Text>
+            {/* Form Card */}
+            <View
+              style={[
+                styles.formCard,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(255, 255, 255, 0.05)'
+                    : 'rgba(255, 255, 255, 0.9)',
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(0, 0, 0, 0.05)',
+                },
+              ]}>
+              
+              {/* Email Input */}
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, {color: theme.colors.text}]}>
+                  Email
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255, 255, 255, 0.05)'
+                        : 'rgba(255, 255, 255, 0.8)',
+                      borderColor: isDark
+                        ? 'rgba(255, 255, 255, 0.1)'
+                        : 'rgba(0, 0, 0, 0.1)',
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="your.email@example.com"
+                  placeholderTextColor={theme.colors.textTertiary}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="your.email@example.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-        </View>
+              {/* Password Input */}
+              <View style={styles.inputGroup}>
+                <Text style={[styles.label, {color: theme.colors.text}]}>
+                  Password
+                </Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(255, 255, 255, 0.05)'
+                        : 'rgba(255, 255, 255, 0.8)',
+                      borderColor: isDark
+                        ? 'rgba(255, 255, 255, 0.1)'
+                        : 'rgba(0, 0, 0, 0.1)',
+                      color: theme.colors.text,
+                    },
+                  ]}
+                  placeholder="••••••••"
+                  placeholderTextColor={theme.colors.textTertiary}
+                  secureTextEntry
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              </View>
 
-        <View style={styles.inputGroup}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="••••••••"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-        </View>
+              {/* Forgot Password */}
+              {isLogin && (
+                <TouchableOpacity
+                  style={styles.forgotPasswordButton}
+                  onPress={handleForgotPassword}>
+                  <Text style={[styles.forgotPasswordText, {color: theme.colors.primary}]}>
+                    Forgot password?
+                  </Text>
+                </TouchableOpacity>
+              )}
 
-        {isLogin && (
-          <TouchableOpacity
-            style={styles.forgotPasswordButton}
-            onPress={handleForgotPassword}>
-            <Text style={styles.forgotPasswordText}>Forgot password?</Text>
-          </TouchableOpacity>
-        )}
+              {/* Auth Button */}
+              <TouchableOpacity
+                style={[styles.authButton, {backgroundColor: theme.colors.primary}]}
+                onPress={handleAuth}
+                disabled={loading}
+                activeOpacity={0.8}>
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.authButtonText}>
+                    {isLogin ? 'Sign In' : 'Create Account'}
+                  </Text>
+                )}
+              </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.authButton}
-          onPress={handleAuth}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.authButtonText}>
-              {isLogin ? 'Sign In' : 'Create Account'}
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.switchModeButton}
-          onPress={() => setIsLogin(!isLogin)}>
-          <Text style={styles.switchModeText}>
-            {isLogin
-              ? "Don't have an account? Sign up"
-              : 'Already have an account? Sign in'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+              {/* Switch Mode */}
+              <TouchableOpacity
+                style={styles.switchModeButton}
+                onPress={() => setIsLogin(!isLogin)}>
+                <Text style={[styles.switchModeText, {color: theme.colors.primary}]}>
+                  {isLogin
+                    ? "Don't have an account? Sign up"
+                    : 'Already have an account? Sign in'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
   },
-  centerContainer: {
+  safeArea: {
+    flex: 1,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  keyboardContainer: {
+    flex: 1,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  formContainer: {
+  content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 24,
+    paddingHorizontal: 24,
+  },
+
+  // Header
+  header: {
+    alignItems: 'center',
+    marginBottom: 40,
   },
   logoContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 48,
+    marginBottom: 16,
   },
   appName: {
     fontSize: 28,
-    fontWeight: 'bold',
-    color: '#007AFF',
+    fontWeight: '700',
+    marginBottom: 8,
+    letterSpacing: -0.5,
   },
   headerText: {
     fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 24,
+    fontWeight: '600',
     textAlign: 'center',
   },
+
+  // Form
+  formCard: {
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+  },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   label: {
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: '600',
     marginBottom: 8,
-    color: '#333',
   },
   input: {
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: 12,
+    padding: 16,
     fontSize: 16,
+    fontWeight: '500',
   },
   forgotPasswordButton: {
     alignSelf: 'flex-end',
     marginBottom: 24,
+    padding: 4,
   },
   forgotPasswordText: {
-    color: '#007AFF',
     fontSize: 14,
+    fontWeight: '600',
   },
   authButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginBottom: 16,
   },
   authButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   switchModeButton: {
     alignItems: 'center',
     padding: 8,
   },
   switchModeText: {
-    color: '#007AFF',
     fontSize: 14,
+    fontWeight: '600',
   },
 });
 
