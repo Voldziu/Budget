@@ -34,11 +34,7 @@ const {width, height} = Dimensions.get('window');
 
 const HomeScreen = ({navigation}) => {
   // State dla grup budżetowych
-  const [selectedGroup, setSelectedGroup] = useState({ 
-    id: 'personal', 
-    name: 'Personal Budget', 
-    isPersonal: true 
-  });
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupController] = useState(new BudgetGroupController());
   
   const [summary, setSummary] = useState(null);
@@ -63,7 +59,16 @@ const HomeScreen = ({navigation}) => {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        await loadData();
+        // Zawsze rozpocznij od Personal Budget
+        const defaultGroup = { 
+          id: 'personal', 
+          name: 'Personal Budget', 
+          isPersonal: true 
+        };
+        
+        setSelectedGroup(defaultGroup);
+        // Nie pobieraj z AsyncStorage
+        await loadDataForGroup(defaultGroup);
       } catch (error) {
         console.error('Error loading initial data:', error);
       }
@@ -72,8 +77,16 @@ const HomeScreen = ({navigation}) => {
     loadInitialData();
     
     const unsubscribe = navigation.addListener('focus', () => {
-      loadData();
+      // Przy powrocie na ekran też resetuj do Personal Budget
+      const defaultGroup = { 
+        id: 'personal', 
+        name: 'Personal Budget', 
+        isPersonal: true 
+      };
+      setSelectedGroup(defaultGroup);
+      loadDataForGroup(defaultGroup);
     });
+    
     return unsubscribe;
   }, [navigation]);
 
@@ -95,20 +108,18 @@ const HomeScreen = ({navigation}) => {
     console.log('HomeScreen: Switching to group:', group);
     setSelectedGroup(group);
     
-    // Nie zapisuj do AsyncStorage - zawsze startuj z Personal Budget
-    
     // WAŻNE: Natychmiast przeładuj dane dla nowej grupy
-    await loadData();
+    await loadDataForGroup(group);
   };
 
-  const loadData = async () => {
+  const loadDataForGroup = async (group = selectedGroup) => {
+    if (!group) return;
+    
     setLoading(true);
     try {
       const date = new Date();
       const currentMonth = date.getMonth();
       const currentYear = date.getFullYear();
-
-      console.log('Loading data for group:', selectedGroup); // Debug
 
       const allCategories = await categoryController.getAllCategories();
       setCategories(allCategories);
@@ -116,24 +127,26 @@ const HomeScreen = ({navigation}) => {
       let spendingSummary;
       let transactions;
 
-      // WAŻNE: Sprawdź aktualny selectedGroup, nie cached value
-      if (selectedGroup.isPersonal) {
-        console.log('Loading personal budget data');
+      console.log('Loading data for group:', group.name, 'isPersonal:', group.isPersonal);
+
+      if (group.isPersonal) {
+        // Załaduj osobisty budżet
         spendingSummary = await budgetController.getSpendingSummary(
           currentMonth,
           currentYear,
         );
         transactions = await transactionController.getAllTransactions();
       } else {
-        console.log('Loading group budget data for:', selectedGroup.id);
+        // Załaduj budżet grupy
         try {
-          transactions = await groupController.getGroupTransactions(selectedGroup.id);
+          transactions = await groupController.getGroupTransactions(group.id);
           spendingSummary = await groupController.getGroupSpendingSummary(
-            selectedGroup.id, 
+            group.id, 
             currentMonth, 
             currentYear
           );
           
+          // Jeśli nie ma transakcji, ustaw puste wartości
           if (!transactions || transactions.length === 0) {
             transactions = [];
             spendingSummary = {
@@ -174,20 +187,26 @@ const HomeScreen = ({navigation}) => {
       setExpandedParents({});
       setChildTransactions({});
 
-      console.log(`Data loaded successfully for ${selectedGroup.isPersonal ? 'personal' : 'group'} budget:`, {
-        groupId: selectedGroup.id,
-        groupName: selectedGroup.name,
+      console.log(`Data loaded successfully for ${group.isPersonal ? 'personal' : 'group'} budget:`, {
+        groupId: group.id,
+        groupName: group.name,
         transactionCount: transactions.length,
-        recentCount: recent.length
+        recentCount: recent.length,
+        totalIncome: spendingSummary.totalIncome,
+        totalExpenses: spendingSummary.totalExpenses
       });
     } catch (error) {
-      console.error('Error loading home data:', error);
+      console.error('Error loading data for group:', error);
       if (isOnline) {
         Alert.alert('Error', 'Failed to load data. Please try again.');
       }
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadData = async () => {
+    await loadDataForGroup(selectedGroup);
   };
 
   useEffect(() => {
