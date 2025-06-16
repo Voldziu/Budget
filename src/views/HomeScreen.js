@@ -83,7 +83,7 @@ const HomeScreen = ({navigation}) => {
 
       // Sprawdź czy to budżet grupowy czy osobisty
       if (selectedGroup.isPersonal) {
-        // Załaduj osobisty budżet (istniejący kod)
+        // Załaduj osobisty budżet
         spendingSummary = await budgetController.getSpendingSummary(
           currentMonth,
           currentYear,
@@ -91,18 +91,14 @@ const HomeScreen = ({navigation}) => {
         transactions = await transactionController.getAllTransactions();
       } else {
         // Załaduj budżet grupy
-        // Najpierw sprawdź czy metody grupowe istnieją, jeśli nie - użyj osobistych
         try {
-          spendingSummary = await budgetController.getGroupSpendingSummary 
-            ? await budgetController.getGroupSpendingSummary(selectedGroup.id, currentMonth, currentYear)
-            : await budgetController.getSpendingSummary(currentMonth, currentYear);
+          // Używaj metod grupowych jeśli istnieją
+          transactions = await groupController.getGroupTransactions(selectedGroup.id);
           
-          transactions = await transactionController.getGroupTransactions
-            ? await transactionController.getGroupTransactions(selectedGroup.id)
-            : await transactionController.getAllTransactions();
+          // Dla uproszczenia, użyj osobistego podsumowania na razie
+          spendingSummary = await budgetController.getSpendingSummary(currentMonth, currentYear);
         } catch (error) {
-          console.warn('Group methods not implemented yet, using personal data:', error);
-          // Fallback do osobistych danych
+          console.warn('Group methods error, using personal data:', error);
           spendingSummary = await budgetController.getSpendingSummary(currentMonth, currentYear);
           transactions = await transactionController.getAllTransactions();
         }
@@ -121,7 +117,6 @@ const HomeScreen = ({navigation}) => {
       console.log(`Data loaded successfully for ${selectedGroup.isPersonal ? 'personal' : 'group'} budget`);
     } catch (error) {
       console.error('Error loading home data:', error);
-      // Don't show alert in offline mode - just log
       if (isOnline) {
         Alert.alert('Error', 'Failed to load data. Please try again.');
       }
@@ -134,7 +129,7 @@ const HomeScreen = ({navigation}) => {
   const handleGroupChange = (group) => {
     console.log('Switching to group:', group);
     setSelectedGroup(group);
-    // loadData() zostanie wywołane automatycznie przez useEffect
+    // loadData zostanie wywołane automatycznie przez useEffect
   };
 
   useEffect(() => {
@@ -335,25 +330,27 @@ const HomeScreen = ({navigation}) => {
       <OfflineBanner />
       
       {/* Group Selector - DODAJ TO */}
-      <BudgetGroupSelector 
-        onGroupChange={handleGroupChange} 
-        navigation={navigation}
-      />
+      <BudgetGroupSelector onGroupChange={handleGroupChange} />
 
       {/* Reszta zawartości HomeScreen... */}
       <ScrollView style={styles.content}>
         {/* Greeting Section */}
         <View style={styles.greetingContainer}>
-          <Text
-            style={[
-              styles.greeting,
-              {color: theme.colors.textSecondary},
-            ]}>
-            {getGreeting()}
-          </Text>
-          <Text style={[styles.userName, {color: theme.colors.text}]}>
-            {selectedGroup.isPersonal ? 'Personal Budget' : selectedGroup.name}
-          </Text>
+          <View style={styles.greetingLeft}>
+            <Text style={[styles.greeting, {color: theme.colors.textSecondary}]}>
+              {getGreeting()}
+            </Text>
+            <Text style={[styles.userName, {color: theme.colors.text}]}>
+              Welcome back!
+            </Text>
+          </View>
+          
+          <TouchableOpacity
+            style={[styles.groupButton, { backgroundColor: theme.colors.primary }]}
+            onPress={() => navigation.navigate('GroupManagement')}
+          >
+            <Text style={styles.groupButtonText}>Manage Groups</Text>
+          </TouchableOpacity>
         </View>
         
         {/* Summary Cards */}
@@ -737,6 +734,9 @@ const styles = StyleSheet.create({
   greetingContainer: {
     flex: 1,
   },
+  greetingLeft: {
+    flex: 1,
+  },
   greeting: {
     fontSize: 16,
     fontWeight: '500',
@@ -935,6 +935,18 @@ const styles = StyleSheet.create({
 
   bottomPadding: {
     height: 32,
+  },
+
+  groupButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 16,
+  },
+  groupButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 });
 

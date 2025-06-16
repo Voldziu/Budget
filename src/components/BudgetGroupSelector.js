@@ -34,18 +34,29 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation }) => {
 
   const loadUserGroups = async () => {
     try {
+      setLoading(true);
       const userGroups = await groupController.getUserGroups();
-      const personalGroup = { id: 'personal', name: 'Personal Budget', isPersonal: true };
+      const personalGroup = { 
+        id: 'personal', 
+        name: 'Personal Budget', 
+        isPersonal: true 
+      };
       
-      setGroups([personalGroup, ...userGroups]);
+      const allGroups = [personalGroup, ...userGroups];
+      setGroups(allGroups);
       
       // Set default selection if none selected
       if (!selectedGroup) {
         setSelectedGroup(personalGroup);
-        onGroupChange(personalGroup);
+        if (onGroupChange) {
+          onGroupChange(personalGroup);
+        }
       }
     } catch (error) {
       console.error('Error loading groups:', error);
+      Alert.alert('Error', 'Failed to load groups');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -60,7 +71,9 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation }) => {
 
   const handleGroupSelect = (group) => {
     setSelectedGroup(group);
-    onGroupChange(group);
+    if (onGroupChange) {
+      onGroupChange(group);
+    }
   };
 
   const handleCreateGroup = async () => {
@@ -95,6 +108,16 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation }) => {
   const openInvitationsScreen = () => {
     navigation.navigate('GroupInvitations');
   };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
+        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+          Loading groups...
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.surface }]}>
@@ -389,5 +412,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingText: {
+    textAlign: 'center',
+    fontSize: 16,
   },
 });

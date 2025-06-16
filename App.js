@@ -31,6 +31,7 @@ import TransactionDetailScreen from './src/views/TransactionDetailScreen';
 import LoginScreen from './src/views/LoginScreen';
 import GroupInvitationsScreen from './src/views/GroupInvitationsScreen';
 import InviteUserScreen from './src/views/InviteUserScreen';
+import GroupManagementScreen from './src/views/GroupManagementScreen';
 
 import { OfflineAuthService } from './src/services/OfflineAuthService';
 import NetInfo from '@react-native-community/netinfo';
@@ -322,6 +323,11 @@ const AppNavigator = ({isAuthenticated}) => {
       <Stack.Screen
         name="InviteUser"
         component={InviteUserScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="GroupManagement" 
+        component={GroupManagementScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>
