@@ -28,34 +28,30 @@ export class OfflineTransactionController extends SupabaseTransactionController 
     }
   }
 
-  async getAllTransactions(includeChildren = false) {
-    console.log('getAllTransactions called, includeChildren:', includeChildren);
-    
-    const isOnline = await OfflineStorageManager.isOnline();
-    console.log('Online status:', isOnline);
-    
-    if (isOnline) {
-      try {
-        console.log('Attempting to fetch transactions from server...');
-        // Fetch from server
-        const transactions = await super.getAllTransactions(includeChildren);
-        console.log('Server returned transactions:', transactions.length);
-        
-        // Cache the data
-        await OfflineStorageManager.cacheData(
-          OfflineStorageManager.KEYS.TRANSACTIONS, 
-          transactions
-        );
-        
-        return transactions;
-      } catch (error) {
-        console.error('Online fetch failed, falling back to cache:', error);
-        return await this.getCachedTransactions();
+  async getAllTransactions(groupId = 'personal') {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+  
+      let query = supabase
+        .from('transactions')
+        .select('*')
+        .eq('user_id', user.id);
+  
+      // Filtruj według grupy
+      if (groupId === 'personal' || groupId === null) {
+        query = query.is('group_id', null); // Personal budget
+      } else {
+        query = query.eq('group_id', groupId); // Konkretna grupa
       }
-    } else {
-      console.log('Working offline, using cached data');
-      // Work offline
-      return await this.getCachedTransactions();
+  
+      const { data, error } = await query.order('date', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      return [];
     }
   }
 

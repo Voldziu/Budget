@@ -432,11 +432,14 @@ export class SupabaseTransactionController {
         .gte('date', startISO)
         .lte('date', endISO);
       
-      // If includeChildren is false, exclude child transactions
-      if (!includeChildren) {
-        query = query.or('is_parent.eq.true,and(parent_id.is.null,is_parent.eq.false)');
+      // NOWA LOGIKA FILTROWANIA:
+      if (groupId === null || groupId === 'personal') {
+        // Personal Budget - tylko transakcje bez group_id
+        query = query.is('group_id', null);
+      } else {
+        // Konkretna grupa
+        query = query.eq('group_id', groupId);
       }
-      
       // Execute query
       const { data, error } = await query.order('date', { ascending: false });
       

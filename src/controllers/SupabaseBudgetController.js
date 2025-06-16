@@ -21,11 +21,11 @@ export class SupabaseBudgetController {
       
       console.log('Date range:', startDate.toISOString(), 'to', endDate.toISOString());
       
-      // Important: Get ALL transactions including children for calculations
       const transactions = await this.transactionController.getTransactionsByDateRange(
         startDate, 
         endDate, 
-        true // includeChildren = true
+        true, // includeChildren = true
+        groupId // NOWY PARAMETR
       );
       
       const categories = await this.categoryController.getAllCategories();

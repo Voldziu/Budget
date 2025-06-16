@@ -142,16 +142,24 @@ const HomeScreen = ({navigation}) => {
       if (group.isPersonal || group.id === 'personal') {
         console.log('Loading PERSONAL budget data (group_id = null)...');
         
-        // Użyj nowych metod dla osobistych transakcji
-        spendingSummary = await budgetController.getPersonalSpendingSummary(currentMonth, currentYear);
-        transactions = await budgetController.getPersonalTransactions();
+        // Użyj getSpendingSummary z null jako group_id
+        spendingSummary = await budgetController.getSpendingSummary(
+          currentMonth,
+          currentYear,
+          null // Personal budget
+        );
+        transactions = await transactionController.getAllTransactions();
         
       } else {
         console.log('Loading GROUP budget data for group:', group.id);
         try {
-          // Załaduj dane grupy
-          transactions = await budgetController.getGroupTransactions(group.id);
-          spendingSummary = await budgetController.getGroupSpendingSummary(group.id, currentMonth, currentYear);
+          // Użyj getSpendingSummary z ID grupy
+          spendingSummary = await budgetController.getSpendingSummary(
+            currentMonth,
+            currentYear,
+            group.id // Group budget
+          );
+          transactions = await groupController.getGroupTransactions(group.id);
           
           console.log('Group data loaded:', {
             transactionCount: transactions?.length || 0,
