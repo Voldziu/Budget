@@ -1,6 +1,7 @@
 // src/controllers/OfflineTransactionController.js - POPRAWIONA WERSJA
 import { SupabaseTransactionController } from './SupabaseTransactionController';
 import { OfflineStorageManager } from '../utils/OfflineStorageManager';
+import { supabase, TABLES, getAuthenticatedUser } from '../utils/supabase';
 
 export class OfflineTransactionController extends SupabaseTransactionController {
   
@@ -41,7 +42,7 @@ export class OfflineTransactionController extends SupabaseTransactionController 
         
         // Cache ALL transactions for this group (nie tylko z date range)
         // Pobierz wszystkie transakcje dla tej grupy żeby mieć pełny cache
-        const allGroupTransactions = await super.getAllTransactions(groupId);
+        const allGroupTransactions = await this.getAllGroupTransactions(groupId);
         await OfflineStorageManager.cacheData(cacheKey, allGroupTransactions);
         
         return transactions;
@@ -83,30 +84,60 @@ export class OfflineTransactionController extends SupabaseTransactionController 
     }
   }
 
-  // POPRAWIONA metoda getAllTransactions z groupId cache
-  async getAllTransactions(groupId = null) {
-    console.log(`OfflineTransactionController.getAllTransactions for group: ${groupId}`);
-    
-    const isOnline = await OfflineStorageManager.isOnline();
-    const cacheKey = OfflineStorageManager.getTransactionsKey(groupId);
-    
-    if (isOnline) {
-      try {
-        console.log('Attempting to fetch all transactions from server...');
-        const transactions = await super.getAllTransactions(groupId);
-        console.log(`Server returned ${transactions.length} transactions for group ${groupId}`);
+  // POPRAWIONA metoda getAllGroupTransactions z groupId cache
+  async getAllGroupTransactions(groupId = 'personal') {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      let query = supabase
+        .from('transactions')
+        .select('*');
+
+      // Filtruj według grupy
+      if (groupId === 'personal' || groupId === null) {
+        // Personal Budget - tylko MOJE transakcje bez group_id
+        console.log('Filtering for personal transactions (user_id = current user, group_id = null)');
+        query = query
+          .eq('user_id', user.id)  // ✅ Dla personal - tylko moje
+          .is('group_id', null);
+      } else {
+        // Konkretna grupa - sprawdź członkostwo i pobierz wszystkie transakcje grupy
+        console.log('Filtering for group transactions, group_id:', groupId);
         
-        // Cache with groupId-specific key
-        await OfflineStorageManager.cacheData(cacheKey, transactions);
-        
-        return transactions;
-      } catch (error) {
-        console.error('Online fetch failed, falling back to cache:', error);
-        return await this.getCachedTransactions(groupId);
+        // Sprawdź członkostwo w grupie
+        const { data: membership, error: membershipError } = await supabase
+          .from('budget_group_members')
+          .select('*')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (membershipError || !membership) {
+          console.error('No access to group:', groupId);
+          return [];
+        }
+
+        // Dla grupy - wszystkie transakcje tej grupy (od wszystkich członków)
+        query = query.eq('group_id', groupId);  // ✅ NIE filtruj po user_id!
       }
-    } else {
-      console.log('Working offline, using cached transactions');
-      return await this.getCachedTransactions(groupId);
+
+      const { data, error } = await query.order('date', { ascending: false });
+      
+      if (error) throw error;
+      
+      console.log(`Found ${data?.length || 0} transactions for groupId: ${groupId}`);
+      
+      // Debug - pokaż user_ids w grupie
+      if (data && data.length > 0 && groupId && groupId !== 'personal') {
+        const userIds = [...new Set(data.map(t => t.user_id))];
+        console.log(`Group ${groupId} transactions from ${userIds.length} users:`, userIds);
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      return [];
     }
   }
 
@@ -375,7 +406,7 @@ export class OfflineTransactionController extends SupabaseTransactionController 
     await OfflineStorageManager.setPendingOperations(remainingPending);
     
     // Refresh cache with server data
-    await this.getAllTransactions();
+    await this.getAllGroupTransactions();
     
     console.log(`Transaction sync completed. Synced: ${syncedCount}/${transactionOperations.length}`);
   }
@@ -398,5 +429,67 @@ export class OfflineTransactionController extends SupabaseTransactionController 
     }
     
     console.log('=== END TRANSACTION DEBUG ===');
+  }
+
+  // Override parent method to match signature
+  async getAllTransactions(includeChildren = false) {
+    return await super.getAllTransactions(includeChildren);
+  }
+
+  // New method for group-specific transactions
+  async getGroupTransactions(groupId = 'personal') {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      let query = supabase
+        .from('transactions')
+        .select('*');
+
+      // Filtruj według grupy
+      if (groupId === 'personal' || groupId === null) {
+        // Personal Budget - tylko MOJE transakcje bez group_id
+        console.log('Filtering for personal transactions (user_id = current user, group_id = null)');
+        query = query
+          .eq('user_id', user.id)  // ✅ Dla personal - tylko moje
+          .is('group_id', null);
+      } else {
+        // Konkretna grupa - sprawdź członkostwo i pobierz wszystkie transakcje grupy
+        console.log('Filtering for group transactions, group_id:', groupId);
+        
+        // Sprawdź członkostwo w grupie
+        const { data: membership, error: membershipError } = await supabase
+          .from('budget_group_members')
+          .select('*')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (membershipError || !membership) {
+          console.error('No access to group:', groupId);
+          return [];
+        }
+
+        // Dla grupy - wszystkie transakcje tej grupy (od wszystkich członków)
+        query = query.eq('group_id', groupId);  // ✅ NIE filtruj po user_id!
+      }
+
+      const { data, error } = await query.order('date', { ascending: false });
+      
+      if (error) throw error;
+      
+      console.log(`Found ${data?.length || 0} transactions for groupId: ${groupId}`);
+      
+      // Debug - pokaż user_ids w grupie
+      if (data && data.length > 0 && groupId && groupId !== 'personal') {
+        const userIds = [...new Set(data.map(t => t.user_id))];
+        console.log(`Group ${groupId} transactions from ${userIds.length} users:`, userIds);
+      }
+      
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      return [];
+    }
   }
 }

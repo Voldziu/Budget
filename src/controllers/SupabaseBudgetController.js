@@ -466,11 +466,11 @@ export class SupabaseBudgetController {
         return [];
       }
 
-      // Pobierz transakcje grupy
+      // Pobierz WSZYSTKIE transakcje grupy (od wszystkich członków)
       const { data: transactions, error } = await supabase
         .from(TABLES.TRANSACTIONS)
         .select('*')
-        .eq('group_id', groupId)  // KLUCZOWE: tylko transakcje tej grupy
+        .eq('group_id', groupId)  // ✅ NIE filtruj po user_id!
         .order('date', { ascending: false });
 
       if (error) {
@@ -478,7 +478,7 @@ export class SupabaseBudgetController {
         return [];
       }
 
-      console.log(`Found ${transactions?.length || 0} transactions for group ${groupId}`);
+      console.log(`Found ${transactions?.length || 0} transactions for group ${groupId} from all members`);
       return transactions || [];
     } catch (error) {
       console.error('Error getting group transactions:', error);

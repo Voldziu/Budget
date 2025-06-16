@@ -414,23 +414,38 @@ export class SupabaseTransactionController {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Zbuduj query
       let query = supabase
         .from(TABLES.TRANSACTIONS)
         .select('*')
-        .eq('user_id', user.id)
         .gte('date', startDate)
         .lte('date', endDate);
 
       // Filtruj według grupy
       if (groupId === null || groupId === 'personal') {
-        // Personal Budget - tylko transakcje bez group_id
-        console.log('Filtering for personal transactions (group_id = null)');
-        query = query.is('group_id', null);
+        // Personal Budget - tylko MOJE transakcje bez group_id
+        console.log('Filtering for personal transactions (user_id = current user, group_id = null)');
+        query = query
+          .eq('user_id', user.id)  // ✅ Dla personal - tylko moje
+          .is('group_id', null);
       } else {
-        // Konkretna grupa
+        // Konkretna grupa - WSZYSTKIE transakcje tej grupy od WSZYSTKICH członków
         console.log('Filtering for group transactions, group_id:', groupId);
-        query = query.eq('group_id', groupId);
+        
+        // Najpierw sprawdź czy użytkownik należy do grupy
+        const { data: membership, error: membershipError } = await supabase
+          .from('budget_group_members')
+          .select('*')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (membershipError || !membership) {
+          console.error('No access to group:', groupId);
+          return [];
+        }
+
+        // Dla grupy - wszystkie transakcje tej grupy (od wszystkich członków)
+        query = query.eq('group_id', groupId);  // ✅ NIE filtruj po user_id!
       }
       
       // Execute query
@@ -449,12 +464,19 @@ export class SupabaseTransactionController {
         const expenseCount = data.filter(t => t.is_income === false).length;
         console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
         
+        // Debug user_ids in group transactions
+        if (groupId && groupId !== 'personal') {
+          const userIds = [...new Set(data.map(t => t.user_id))];
+          console.log(`Transactions from ${userIds.length} different users:`, userIds);
+        }
+        
         // Debug first few transactions
         console.log('Sample transactions:', data.slice(0, 3).map(t => ({
           id: t.id,
           amount: t.amount,
           is_income: t.is_income,
           group_id: t.group_id,
+          user_id: t.user_id,
           date: t.date
         })));
       }

@@ -216,7 +216,7 @@ export class BudgetGroupController {
         .from('budget_group_members')
         .select('*')
         .eq('group_id', groupId)
-        //.eq('user_id', user.id)
+        .eq('user_id', user.id)
         .single();
 
       if (membershipError || !membership) {
@@ -224,11 +224,11 @@ export class BudgetGroupController {
         return [];
       }
 
-      // Pobierz transakcje grupy
+      // Pobierz WSZYSTKIE transakcje grupy (od wszystkich członków)
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
-        .eq('group_id', groupId)
+        .eq('group_id', groupId)  // ✅ NIE filtruj po user_id!
         .order('date', { ascending: false });
 
       if (error) {
@@ -236,7 +236,7 @@ export class BudgetGroupController {
         return [];
       }
 
-      console.log(`Fetched ${data?.length || 0} transactions for group ${groupId}`);
+      console.log(`Fetched ${data?.length || 0} transactions for group ${groupId} from all members`);
       return data || [];
     } catch (error) {
       console.error('Error getting group transactions:', error);
@@ -294,7 +294,6 @@ export class BudgetGroupController {
     try {
       console.log(`Generating group spending summary for group ${groupId}, ${month}/${year}`);
       
-      // Pobierz transakcje grupy dla danego miesiąca
       const startDate = new Date(year, month, 1);
       const endDate = new Date(year, month + 1, 0);
       
@@ -322,11 +321,11 @@ export class BudgetGroupController {
         };
       }
 
-      // Pobierz transakcje grupy z filtrem daty
+      // Pobierz WSZYSTKIE transakcje grupy z filtrem daty (od wszystkich członków)
       const { data: transactions, error } = await supabase
         .from('transactions')
         .select('*')
-        .eq('group_id', groupId)
+        .eq('group_id', groupId)  // ✅ NIE filtruj po user_id!
         .gte('date', startDate.toISOString())
         .lte('date', endDate.toISOString());
 
@@ -334,6 +333,8 @@ export class BudgetGroupController {
         console.error('Error fetching group transactions:', error);
         throw error;
       }
+
+      console.log(`Found ${transactions?.length || 0} group transactions from all members for summary`);
 
       // Pobierz budżet grupy
       const { data: groupBudget } = await supabase
@@ -401,7 +402,7 @@ export class BudgetGroupController {
         budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
       };
 
-      console.log('Generated group spending summary:', summary);
+      console.log('Generated group spending summary from all members:', summary);
       return summary;
     } catch (error) {
       console.error('Error generating group spending summary:', error);
