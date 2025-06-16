@@ -85,11 +85,19 @@ const HomeScreen = ({navigation}) => {
     }
   }, [selectedGroup]);
 
+  // Add debug effect
+  useEffect(() => {
+    console.log('HomeScreen: selectedGroup changed to:', selectedGroup);
+  }, [selectedGroup]);
+
   // Handle group change
   const handleGroupChange = async (group) => {
-    console.log('Switching to group:', group);
+    console.log('HomeScreen: Switching to group:', group);
     setSelectedGroup(group);
-    // Load data for the selected group
+    
+    // Nie zapisuj do AsyncStorage - zawsze startuj z Personal Budget
+    
+    // WAŻNE: Natychmiast przeładuj dane dla nowej grupy
     await loadData();
   };
 
@@ -100,28 +108,32 @@ const HomeScreen = ({navigation}) => {
       const currentMonth = date.getMonth();
       const currentYear = date.getFullYear();
 
+      console.log('Loading data for group:', selectedGroup); // Debug
+
       const allCategories = await categoryController.getAllCategories();
       setCategories(allCategories);
 
       let spendingSummary;
       let transactions;
 
-      // Sprawdź czy to budżet grupowy czy osobisty
+      // WAŻNE: Sprawdź aktualny selectedGroup, nie cached value
       if (selectedGroup.isPersonal) {
-        // Załaduj osobisty budżet
+        console.log('Loading personal budget data');
         spendingSummary = await budgetController.getSpendingSummary(
           currentMonth,
           currentYear,
         );
         transactions = await transactionController.getAllTransactions();
       } else {
-        // Załaduj budżet grupy
+        console.log('Loading group budget data for:', selectedGroup.id);
         try {
-          // Używaj metod grupowych
           transactions = await groupController.getGroupTransactions(selectedGroup.id);
-          spendingSummary = await groupController.getGroupSpendingSummary(selectedGroup.id, currentMonth, currentYear);
+          spendingSummary = await groupController.getGroupSpendingSummary(
+            selectedGroup.id, 
+            currentMonth, 
+            currentYear
+          );
           
-          // Jeśli nie ma transakcji, ustaw puste wartości
           if (!transactions || transactions.length === 0) {
             transactions = [];
             spendingSummary = {
@@ -136,7 +148,6 @@ const HomeScreen = ({navigation}) => {
           }
         } catch (error) {
           console.error('Error loading group data:', error);
-          // Nie fallbackujemy do osobistych danych, tylko pokazujemy puste
           transactions = [];
           spendingSummary = {
             totalIncome: 0,

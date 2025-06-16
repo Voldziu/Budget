@@ -14,7 +14,6 @@ import {
 import Icon from 'react-native-vector-icons/Feather';
 import { BudgetGroupController } from '../controllers/BudgetGroupController';
 import { useTheme } from '../utils/ThemeContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const BudgetGroupSelector = ({ onGroupChange, navigation, compact = false, selectedGroup }) => {
   const [groups, setGroups] = useState([]);
@@ -73,8 +72,7 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation, compact = false
     try {
       console.log('Selecting group:', group);
       
-      // Save selected group to AsyncStorage
-      await AsyncStorage.setItem('last_selected_group', JSON.stringify(group));
+      // Nie zapisuj do AsyncStorage - niech HomeScreen kontroluje stan
       
       // Call onGroupChange with the selected group
       if (onGroupChange) {
@@ -85,8 +83,8 @@ export const BudgetGroupSelector = ({ onGroupChange, navigation, compact = false
       
       console.log('Group selection completed:', group);
     } catch (error) {
-      console.error('Error saving selected group:', error);
-      Alert.alert('Error', 'Failed to save group selection');
+      console.error('Error selecting group:', error);
+      Alert.alert('Error', 'Failed to select group');
     }
   };
 
