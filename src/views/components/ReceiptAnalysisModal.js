@@ -15,13 +15,17 @@ import {
 import Icon from 'react-native-vector-icons/Feather';
 import { SupabaseTransactionController } from '../../controllers/SupabaseTransactionController';
 
+import {OfflineTransactionController} from '../../controllers/OfflineTransactionController';
+
+
 const ReceiptAnalysisModal = ({ 
   visible, 
   onClose, 
   receiptData, 
   categories,
   receiptImage,
-  storeName = "Store Receipt"
+  storeName = "Store Receipt",
+  selectedGroupId = null
 }) => {
   const [editedProducts, setEditedProducts] = useState([]);
   const [selectedProductIndex, setSelectedProductIndex] = useState(null);
@@ -31,7 +35,7 @@ const ReceiptAnalysisModal = ({
   const [isLoading, setIsLoading] = useState(false);
   
   // Initialize transaction controller
-  const transactionController = new SupabaseTransactionController();
+  const transactionController = new OfflineTransactionController();
   
   // Initialize products data when the receipt data changes
   useEffect(() => {
@@ -122,6 +126,7 @@ const ReceiptAnalysisModal = ({
         category: products.length > 0 ? products[0].categoryId : categories[0].id, 
         date: new Date().toISOString(),
         is_income: false,
+        group_id: selectedGroupId === 'personal' ? null : selectedGroupId
       };
       
       // Use the addReceiptTransaction method to create parent and children

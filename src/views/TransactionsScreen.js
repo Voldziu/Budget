@@ -233,6 +233,8 @@ const TransactionsScreen = ({navigation}) => {
       });
     }
 
+    filtered = filtered.filter(t => !t.parent_id);
+
     return filtered;
   };
 

@@ -309,7 +309,7 @@ export class SupabaseTransactionController {
         try {
           const childData = {
             amount: product.price,
-            description: `${parentTransaction.description} - Item`,
+            description: product.name,
             category: product.categoryId || parentTransaction.category,
             date: parentTransaction.date || new Date().toISOString(),
             is_income: false,
@@ -447,6 +447,7 @@ export class SupabaseTransactionController {
         // Dla grupy - wszystkie transakcje tej grupy (od wszystkich członków)
         query = query.eq('group_id', groupId);  // ✅ NIE filtruj po user_id!
       }
+       query = query.or('is_parent.eq.true,and(parent_id.is.null,is_parent.eq.false)');
       
       // Execute query
       const { data, error } = await query.order('date', { ascending: false });
