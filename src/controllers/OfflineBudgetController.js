@@ -1,4 +1,6 @@
 // src/controllers/OfflineBudgetController.js - POPRAWIONA WERSJA
+
+import { supabase, TABLES } from '../utils/supabase';
 import { SupabaseBudgetController } from './SupabaseBudgetController';
 import { OfflineStorageManager } from '../utils/OfflineStorageManager';
 import AsyncStorage from '@react-native-async-storage/async-storage';
