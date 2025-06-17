@@ -25,11 +25,11 @@ import {useCurrency} from '../utils/CurrencyContext';
 import {useTheme} from '../utils/ThemeContext';
 import {launchCamera, launchImageLibrary} from 'react-native-image-picker';
 import ReceiptAnalysisModal from './components/ReceiptAnalysisModal';
-
 import { OfflineTransactionController } from '../controllers/OfflineTransactionController';
 import { OfflineCategoryController } from '../controllers/OfflineCategoryController';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import {OfflineBanner} from './components/OfflineBanner';
+import { BudgetGroupController } from '../controllers/BudgetGroupController';
 
 const {width} = Dimensions.get('window');
 
@@ -101,6 +101,12 @@ const AddTransactionScreen = ({route, navigation}) => {
   const [isSaving, setIsSaving] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
 
+  // Group selection states
+  const [selectedGroupId, setSelectedGroupId] = useState(null);
+  const [userGroups, setUserGroups] = useState([]);
+  const [showGroupSelector, setShowGroupSelector] = useState(false);
+  const [loadingGroups, setLoadingGroups] = useState(false);
+
   // Category modal state
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -128,6 +134,7 @@ const AddTransactionScreen = ({route, navigation}) => {
   // Load data on component mount
   useEffect(() => {
     loadData();
+    loadUserGroups();
   }, []);
 
   // Populate form if editing
@@ -150,6 +157,7 @@ const AddTransactionScreen = ({route, navigation}) => {
       setDescription(editTransaction.description);
       setIs_Income(editTransaction.is_income === true);
       setSelectedCategory(editTransaction.category);
+      setSelectedGroupId(editTransaction.group_id || null);
 
       if (editTransaction.recurring) {
         setRecurring(true);
@@ -163,6 +171,55 @@ const AddTransactionScreen = ({route, navigation}) => {
       }
     }
   }, [editTransaction, navigation]);
+
+  const loadUserGroups = async () => {
+    setLoadingGroups(true);
+    try {
+      const groupController = new BudgetGroupController();
+      const groups = await groupController.getUserGroups();
+      
+      // Add "Personal Budget" as first option
+      const allGroups = [
+        { id: null, name: 'Personal Budget', isPersonal: true },
+        ...groups
+      ];
+      
+      setUserGroups(allGroups);
+      
+      // If editing transaction, check if selected group still exists
+      if (editTransaction && editTransaction.group_id) {
+        const groupExists = allGroups.find(g => g.id === editTransaction.group_id);
+        if (!groupExists) {
+          // If group doesn't exist, set to Personal Budget and show warning
+          setSelectedGroupId(null);
+          Alert.alert(
+            'Group Not Found',
+            'The group assigned to this transaction no longer exists. It will be moved to your personal budget.',
+            [{ text: 'OK' }]
+          );
+        }
+      }
+      
+      // Set default option only if not editing transaction
+      if (!editTransaction && selectedGroupId === undefined) {
+        setSelectedGroupId(null);
+      }
+    } catch (error) {
+      console.error('Error loading user groups:', error);
+      Alert.alert('Error', 'Failed to load groups');
+    } finally {
+      setLoadingGroups(false);
+    }
+  };
+
+  const handleGroupSelect = (groupId) => {
+    setSelectedGroupId(groupId);
+    setShowGroupSelector(false);
+  };
+
+  // Find selected group for display
+  const selectedGroup = userGroups.find(group => group.id === selectedGroupId) || 
+                       userGroups.find(group => group.isPersonal);
 
   const loadData = async () => {
     setLoading(true);
@@ -320,166 +377,94 @@ const AddTransactionScreen = ({route, navigation}) => {
     }
   };
 
-  // const handleSave = async () => {
-  //   if (editTransaction && editTransaction.is_parent) {
-  //     navigation.goBack();
-  //     return;
-  //   }
-
-  //   let formattedAmount = amount.replace(',', '.');
-
-  //   if (
-  //     !formattedAmount ||
-  //     isNaN(parseFloat(formattedAmount)) ||
-  //     parseFloat(formattedAmount) <= 0
-  //   ) {
-  //     Alert.alert('Error', 'Please enter a valid amount');
-  //     return;
-  //   }
-
-  //   if (!description.trim()) {
-  //     Alert.alert('Error', 'Please enter a description');
-  //     return;
-  //   }
-
-  //   if (!is_income && !selectedCategory) {
-  //     Alert.alert('Error', 'Please select a category');
-  //     return;
-  //   }
-
-  //   setIsSaving(true);
-
-  //   try {
-  //     const transactionData = {
-  //       amount: parsedAmount,
-  //       description,
-  //       category: categoryId,
-  //       is_income: is_income,
-  //       date: new Date().toISOString(),
-  //       is_parent: false,
-  //       parent_id: null,
-  //     };
-
-  //     if (editTransaction) {
-  //       await transactionController.updateTransaction(
-  //         editTransaction.id,
-  //         transactionData,
-  //       );
-  //     } else {
-  //       await transactionController.addTransaction(transactionData);
-  //     }
-
-  //     // Show different messages for offline
-  //     if (!isOnline) {
-  //       Alert.alert(
-  //         'Saved Offline', 
-  //         'Transaction saved locally. It will sync when you\'re back online.'
-  //       );
-  //     }
-
-  //     navigation.goBack();
-  //   } catch (error) {
-  //     Alert.alert('Error', 'Failed to save transaction.');
-  //   } finally {
-  //     setIsSaving(false);
-  //   }
-  // };
-
-  // Zamień funkcję handleSave w AddTransactionScreen.js na tę poprawioną:
-
-// 🚨 ZAMIEŃ CAŁĄ FUNKCJĘ handleSave w AddTransactionScreen.js na tę:
-
-const handleSave = async () => {
-  console.log('🔄 handleSave started');
-  
-  if (editTransaction && editTransaction.is_parent) {
-    navigation.goBack();
-    return;
-  }
-
-  let formattedAmount = amount.replace(',', '.');
-  console.log('💰 Original amount:', amount, '-> Formatted:', formattedAmount);
-
-  // Validation
-  if (
-    !formattedAmount ||
-    isNaN(parseFloat(formattedAmount)) ||
-    parseFloat(formattedAmount) <= 0
-  ) {
-    Alert.alert('Error', 'Please enter a valid amount');
-    return;
-  }
-
-  if (!description.trim()) {
-    Alert.alert('Error', 'Please enter a description');
-    return;
-  }
-
-  if (!is_income && !selectedCategory) {
-    Alert.alert('Error', 'Please select a category');
-    return;
-  }
-
-  setIsSaving(true);
-
-  try {
-    // 🚨 POPRAWIONE: Używamy prawidłowych zmiennych
-    const parsedAmount = parseFloat(formattedAmount); // ✅ Teraz parsedAmount istnieje
+  const handleSave = async () => {
+    console.log('🔄 handleSave started');
     
-    const transactionData = {
-      amount: parsedAmount,           // ✅ Używamy lokalnej zmiennej parsedAmount
-      description: description.trim(),
-      category: selectedCategory,     // ✅ Używamy selectedCategory zamiast categoryId
-      is_income: is_income,
-      date: new Date().toISOString(),
-      is_parent: false,
-      parent_id: null,
-    };
-
-    console.log('📤 Transaction data to save:', transactionData);
-
-    if (editTransaction) {
-      console.log('✏️ Updating existing transaction:', editTransaction.id);
-      await transactionController.updateTransaction(
-        editTransaction.id,
-        transactionData,
-      );
-      console.log('✅ Transaction updated successfully');
-    } else {
-      console.log('➕ Adding new transaction');
-      const result = await transactionController.addTransaction(transactionData);
-      console.log('✅ Transaction added successfully:', result);
+    if (editTransaction && editTransaction.is_parent) {
+      navigation.goBack();
+      return;
     }
 
-    // Show success message
-    if (!isOnline) {
-      Alert.alert(
-        'Saved Offline', 
-        'Transaction saved locally. It will sync when you\'re back online.'
-      );
-    } else {
-      Alert.alert(
-        'Success', 
-        `Transaction ${editTransaction ? 'updated' : 'saved'} successfully!`
-      );
+    let formattedAmount = amount.replace(',', '.');
+    console.log('💰 Original amount:', amount, '-> Formatted:', formattedAmount);
+
+    // Validation
+    if (
+      !formattedAmount ||
+      isNaN(parseFloat(formattedAmount)) ||
+      parseFloat(formattedAmount) <= 0
+    ) {
+      Alert.alert('Error', 'Please enter a valid amount');
+      return;
     }
 
-    console.log('✅ Navigating back');
-    navigation.goBack();
-    
-  } catch (error) {
-    console.error('❌ Error saving transaction:', error);
-    console.error('❌ Error details:', error.message);
-    console.error('❌ Error stack:', error.stack);
-    
-    Alert.alert(
-      'Error', 
-      `Failed to save transaction: ${error.message || 'Unknown error'}`
-    );
-  } finally {
-    setIsSaving(false);
-  }
-};
+    if (!description.trim()) {
+      Alert.alert('Error', 'Please enter a description');
+      return;
+    }
+
+    if (!is_income && !selectedCategory) {
+      Alert.alert('Error', 'Please select a category');
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const parsedAmount = parseFloat(formattedAmount);
+      
+      // Updated transactionData with group_id
+      const transactionData = {
+        amount: parsedAmount,
+        description: description.trim(),
+        category: selectedCategory,
+        is_income: is_income,
+        date: new Date().toISOString(),
+        is_parent: false,
+        parent_id: null,
+        group_id: selectedGroupId, // New field: null for Personal Budget, UUID for groups
+      };
+
+      console.log('📤 Transaction data to save:', transactionData);
+
+      if (editTransaction) {
+        console.log('✏️ Updating existing transaction:', editTransaction.id);
+        await transactionController.updateTransaction(
+          editTransaction.id,
+          transactionData,
+        );
+        console.log('✅ Transaction updated successfully');
+      } else {
+        console.log('➕ Adding new transaction');
+        const result = await transactionController.addTransaction(transactionData);
+        console.log('✅ Transaction added successfully:', result);
+      }
+
+      // Show success message with group info
+      const groupInfo = selectedGroupId ? 
+        ` to group "${selectedGroup?.name}"` : 
+        ' to your personal budget';
+      
+      if (!isOnline) {
+        Alert.alert(
+          'Saved Offline', 
+          `Transaction saved locally${groupInfo}. It will sync when you're back online.`
+        );
+      } else {
+        Alert.alert(
+          'Success', 
+          `Transaction ${editTransaction ? 'updated' : 'added'} successfully${groupInfo}!`
+        );
+      }
+
+      navigation.goBack();
+    } catch (error) {
+      console.error('❌ Error saving transaction:', error);
+      Alert.alert('Error', 'Failed to save transaction.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleDeleteCategory = async categoryId => {
     try {
@@ -816,6 +801,114 @@ const handleSave = async () => {
                 )}
               </View>
             )}
+
+            {/* Group Selector */}
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
+                Group
+              </Text>
+              
+              <TouchableOpacity
+                style={[
+                  styles.groupSelectorButton,
+                  {
+                    backgroundColor: theme.colors.card,
+                    borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+                  },
+                ]}
+                onPress={() => setShowGroupSelector(true)}
+                disabled={loadingGroups}
+              >
+                <View style={styles.groupSelectorContent}>
+                  <View style={styles.groupInfo}>
+                    <Icon 
+                      name={selectedGroup?.isPersonal ? "user" : "users"} 
+                      size={16} 
+                      color={theme.colors.textSecondary} 
+                    />
+                    <Text style={[styles.groupSelectorText, {color: theme.colors.text}]}>
+                      {loadingGroups ? 'Loading...' : (selectedGroup?.name || 'Personal Budget')}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-down" size={16} color={theme.colors.textSecondary} />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Group Selection Modal */}
+            <Modal
+              visible={showGroupSelector}
+              animationType="slide"
+              transparent={true}
+              onRequestClose={() => setShowGroupSelector(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={[styles.groupModal, {backgroundColor: theme.colors.background}]}>
+                  <View style={styles.modalHeader}>
+                    <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                      Select Group
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => setShowGroupSelector(false)}
+                      style={[styles.modalCloseButton, {backgroundColor: theme.colors.card}]}
+                    >
+                      <Icon name="x" size={14} color={theme.colors.textSecondary} />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView style={styles.groupsList}>
+                    {userGroups.map((group) => (
+                      <TouchableOpacity
+                        key={group.id || 'personal'}
+                        style={[
+                          styles.groupOption,
+                          {
+                            backgroundColor: selectedGroupId === group.id ? 
+                              theme.colors.primary + '20' : 
+                              'transparent',
+                          },
+                        ]}
+                        onPress={() => handleGroupSelect(group.id)}
+                      >
+                        <View style={styles.groupOptionContent}>
+                          <Icon 
+                            name={group.isPersonal ? "user" : "users"} 
+                            size={18} 
+                            color={selectedGroupId === group.id ? 
+                              theme.colors.primary : 
+                              theme.colors.textSecondary
+                            } 
+                          />
+                          <View style={styles.groupOptionText}>
+                            <Text style={[
+                              styles.groupOptionName,
+                              {
+                                color: selectedGroupId === group.id ? 
+                                  theme.colors.primary : 
+                                  theme.colors.text
+                              }
+                            ]}>
+                              {group.name}
+                            </Text>
+                            {group.description && (
+                              <Text style={[
+                                styles.groupOptionDescription,
+                                {color: theme.colors.textSecondary}
+                              ]}>
+                                {group.description}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                        {selectedGroupId === group.id && (
+                          <Icon name="check" size={16} color={theme.colors.primary} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+            </Modal>
 
             {/* Receipt */}
             <View style={styles.section}>
@@ -1776,6 +1869,92 @@ const styles = StyleSheet.create({
 
   bottomSpace: {
     height: 20,
+  },
+
+  // Group Selector
+  groupSelectorButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  groupSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  groupInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  groupSelectorText: {
+    fontSize: 16,
+    marginLeft: 12,
+    flex: 1,
+  },
+
+  // Modal Styles
+  groupModal: {
+    flex: 1,
+    maxHeight: '70%',
+    marginTop: 'auto',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 24,
+  },
+  groupsList: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  groupOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginVertical: 4,
+    borderRadius: 12,
+  },
+  groupOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  groupOptionText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  groupOptionName: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  groupOptionDescription: {
+    fontSize: 12,
+    marginTop: 2,
+    opacity: 0.7,
+  },
+
+  offlineHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  offlineText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+
+  offlineWarning: {
+    color: 'red',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 12,
+    textAlign: 'center',
   },
 });
 

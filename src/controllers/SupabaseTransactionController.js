@@ -407,34 +407,45 @@ export class SupabaseTransactionController {
   }
 
   // Get transactions by date range - Updated to handle child transaction filtering
-  async getTransactionsByDateRange(startDate, endDate, includeChildren = false) {
+  async getTransactionsByDateRange(startDate, endDate, groupId = null) {
     try {
-      console.log('Fetching transactions in date range:', startDate, 'to', endDate);
+      console.log(`Getting transactions for date range: ${startDate} to ${endDate}, groupId: ${groupId}`);
       
-      const user = await getAuthenticatedUser();
-      
-      if (!user) {
-        console.error('No authenticated user found when trying to fetch transactions by date range');
-        return [];
-      }
-      
-      // Ensure we have valid date strings
-      const startISO = new Date(startDate).toISOString();
-      const endISO = new Date(endDate).toISOString();
-      
-      console.log('Using ISO dates:', startISO, 'to', endISO);
-      
-      // Build query with date range
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       let query = supabase
         .from(TABLES.TRANSACTIONS)
         .select('*')
-        .eq('user_id', user.id)
-        .gte('date', startISO)
-        .lte('date', endISO);
-      
-      // If includeChildren is false, exclude child transactions
-      if (!includeChildren) {
-        query = query.or('is_parent.eq.true,and(parent_id.is.null,is_parent.eq.false)');
+        .gte('date', startDate)
+        .lte('date', endDate);
+
+      // Filtruj według grupy
+      if (groupId === null || groupId === 'personal') {
+        // Personal Budget - tylko MOJE transakcje bez group_id
+        console.log('Filtering for personal transactions (user_id = current user, group_id = null)');
+        query = query
+          .eq('user_id', user.id)  // ✅ Dla personal - tylko moje
+          .is('group_id', null);
+      } else {
+        // Konkretna grupa - WSZYSTKIE transakcje tej grupy od WSZYSTKICH członków
+        console.log('Filtering for group transactions, group_id:', groupId);
+        
+        // Najpierw sprawdź czy użytkownik należy do grupy
+        const { data: membership, error: membershipError } = await supabase
+          .from('budget_group_members')
+          .select('*')
+          .eq('group_id', groupId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (membershipError || !membership) {
+          console.error('No access to group:', groupId);
+          return [];
+        }
+
+        // Dla grupy - wszystkie transakcje tej grupy (od wszystkich członków)
+        query = query.eq('group_id', groupId);  // ✅ NIE filtruj po user_id!
       }
       
       // Execute query
@@ -445,13 +456,29 @@ export class SupabaseTransactionController {
         throw error;
       }
       
-      console.log(`Found ${data?.length || 0} transactions in date range`);
+      console.log(`Found ${data?.length || 0} transactions in date range for groupId: ${groupId}`);
       
-      // Log income vs expense count
+      // Log income vs expense count for debugging
       if (data && data.length > 0) {
         const incomeCount = data.filter(t => t.is_income === true).length;
         const expenseCount = data.filter(t => t.is_income === false).length;
         console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
+        
+        // Debug user_ids in group transactions
+        if (groupId && groupId !== 'personal') {
+          const userIds = [...new Set(data.map(t => t.user_id))];
+          console.log(`Transactions from ${userIds.length} different users:`, userIds);
+        }
+        
+        // Debug first few transactions
+        console.log('Sample transactions:', data.slice(0, 3).map(t => ({
+          id: t.id,
+          amount: t.amount,
+          is_income: t.is_income,
+          group_id: t.group_id,
+          user_id: t.user_id,
+          date: t.date
+        })));
       }
       
       return data || [];

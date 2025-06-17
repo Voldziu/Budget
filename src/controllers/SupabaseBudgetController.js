@@ -11,107 +11,19 @@ export class SupabaseBudgetController {
   
   // Get spending summary with improved calculations and debugging
   // Updated to handle parent-child transactions
-  async getSpendingSummary(month, year) {
-    try {      
-      console.log(`Generating spending summary for ${month}/${year}`);
+  async getSpendingSummary(month, year, groupId = null) {
+    try {
+      console.log(`Generating spending summary for ${month}/${year}, groupId: ${groupId}`);
       
-      // Get all transactions for the given month
-      const startDate = new Date(year, month, 1);
-      const endDate = new Date(year, month + 1, 0);
-      
-      console.log('Date range:', startDate.toISOString(), 'to', endDate.toISOString());
-      
-      // Important: Get ALL transactions including children for calculations
-      const transactions = await this.transactionController.getTransactionsByDateRange(
-        startDate, 
-        endDate, 
-        true // includeChildren = true
-      );
-      
-      const categories = await this.categoryController.getAllCategories();
-      
-      // Get the current budget amount
-      const currentBudget = await this.getCurrentBudget();
-      const budgetAmount = currentBudget?.amount || 0;
-      
-      console.log('Transactions for calculation:', transactions.length);
-      if (transactions.length > 0) {
-        console.log('Sample transaction:', transactions[0]);
+      // Jeśli groupId jest null lub 'personal' - użyj osobistej metody
+      if (!groupId || groupId === 'personal' || groupId === null) {
+        return await this.getPersonalSpendingSummary(month, year);
       }
       
-      // Debug transaction types
-      const parentCount = transactions.filter(t => t.is_parent === true).length;
-      const childCount = transactions.filter(t => t.parent_id !== null).length;
-      const regularCount = transactions.filter(t => !t.is_parent && t.parent_id === null).length;
-      
-      console.log(`Transaction breakdown: Parents: ${parentCount}, Children: ${childCount}, Regular: ${regularCount}`);
-      
-      // Debug income vs expense flags
-      const incomeCount = transactions.filter(t => t.is_income === true).length;
-      const expenseCount = transactions.filter(t => t.is_income === false).length;
-      console.log(`Income transactions: ${incomeCount}, Expense transactions: ${expenseCount}`);
-      
-      // Calculate total income and expenses - fixed to respect is_income flag
-      // For expenses, EXCLUDE parent transactions to avoid double-counting
-      const totalIncome = transactions
-        .filter(t => t.is_income === true) // Only income transactions
-        .reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-        
-      const totalExpenses = transactions
-        .filter(t => t.is_income === false && !t.is_parent) // Exclude parent transactions for expense calculation
-        .reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-      
-      console.log('Calculated income:', totalIncome, 'expenses:', totalExpenses, 'budget:', budgetAmount);
-      
-      // Calculate spending by category
-      // Use child transactions (not parents) for proper category allocation
-      const spendingByCategory = categories.map(category => {
-        const categoryTransactions = transactions.filter(
-          t => t.category === category.id && t.is_income === false && !t.is_parent
-        );
-        
-        const spent = categoryTransactions.reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-        
-        const remaining = category.budget - spent;
-        const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
-        
-        console.log(`Category ${category.name}: spent ${spent} of ${category.budget} (${percentage.toFixed(1)}%)`);
-        
-        return {
-          category,
-          spent,
-          remaining: remaining > 0 ? remaining : 0,
-          percentage: percentage > 100 ? 100 : percentage,
-        };
-      });
-      
-      // Calculate the total budget (user-set budget + current month's income)
-      const totalBudget = budgetAmount + totalIncome;
-      
-      const summary = {
-        totalIncome,
-        totalExpenses,
-        balance: totalIncome - totalExpenses,
-        monthlyBudget: budgetAmount,
-        totalBudget: totalBudget,
-        spendingByCategory,
-        // Add percentages for overall budget progress
-        budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
-      };
-      
-      console.log('Final summary:', JSON.stringify(summary, null, 2));
-      return summary;
+      // W przeciwnym razie użyj metody grupowej
+      return await this.getGroupSpendingSummary(groupId, month, year);
     } catch (error) {
-      console.error('Error generating spending summary:', error);
+      console.error('Error in getSpendingSummary:', error);
       throw error;
     }
   }
@@ -233,6 +145,344 @@ export class SupabaseBudgetController {
     } catch (error) {
       console.error('Error setting budget:', error);
       throw error;
+    }
+  }
+
+  // Dodaj do SupabaseBudgetController
+  async getGroupSpendingSummary(groupId, month, year) {
+    try {
+      console.log(`Generating group spending summary for group ${groupId}, ${month}/${year}`);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź członkostwo w grupie
+      const { data: membership, error: membershipError } = await supabase
+        .from('budget_group_members')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (membershipError || !membership) {
+        console.error('No access to group:', groupId);
+        return {
+          totalIncome: 0,
+          totalExpenses: 0,
+          balance: 0,
+          spendingByCategory: [],
+          monthlyBudget: 0,
+          totalBudget: 0,
+          budgetPercentage: 0
+        };
+      }
+
+      // Pobierz transakcje grupy z danego miesiąca
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0);
+      
+      const { data: transactions, error } = await supabase
+        .from(TABLES.TRANSACTIONS)
+        .select('*')
+        .eq('group_id', groupId)
+        .gte('date', startDate.toISOString())
+        .lte('date', endDate.toISOString());
+
+      if (error) throw error;
+
+      // Pobierz budżet grupy
+      const { data: groupBudget } = await supabase
+        .from(TABLES.BUDGETS)
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('month', month)
+        .eq('year', year)
+        .eq('is_group_budget', true)
+        .single();
+
+      const budgetAmount = groupBudget?.amount || 0;
+      const categories = await this.categoryController.getAllCategories();
+
+      // Oblicz dochody i wydatki
+      const totalIncome = transactions
+        .filter(t => t.is_income === true)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+        
+      const totalExpenses = transactions
+        .filter(t => t.is_income === false && !t.is_parent)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+
+      // Oblicz wydatki per kategoria
+      const spendingByCategory = categories.map(category => {
+        const categoryTransactions = transactions.filter(
+          t => t.category === category.id && t.is_income === false && !t.is_parent
+        );
+        
+        const spent = categoryTransactions.reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+        
+        const remaining = category.budget - spent;
+        const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
+        
+        return {
+          category,
+          spent,
+          remaining: remaining > 0 ? remaining : 0,
+          percentage: percentage > 100 ? 100 : percentage,
+        };
+      });
+
+      const totalBudget = budgetAmount + totalIncome;
+
+      const summary = {
+        totalIncome,
+        totalExpenses,
+        balance: totalIncome - totalExpenses,
+        monthlyBudget: budgetAmount,
+        totalBudget: totalBudget,
+        spendingByCategory,
+        budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
+      };
+
+      console.log('Generated group spending summary:', summary);
+      return summary;
+    } catch (error) {
+      console.error('Error generating group spending summary:', error);
+      throw error;
+    }
+  }
+
+  async setGroupBudget(groupId, budget) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź czy użytkownik ma uprawnienia do grupy
+      const hasPermission = await this.checkGroupPermission(groupId, user.id, ['admin']);
+      if (!hasPermission) throw new Error('Insufficient permissions');
+
+      const budgetData = {
+        ...budget,
+        group_id: groupId,
+        is_group_budget: true,
+        user_id: user.id // kto ustawił budżet
+      };
+
+      const { data, error } = await supabase
+        .from(TABLES.BUDGETS)
+        .upsert(budgetData, {
+          onConflict: 'group_id,month,year'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error setting group budget:', error);
+      throw error;
+    }
+  }
+
+  async getGroupBudget(groupId, month, year) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź czy użytkownik należy do grupy
+      const { data: membership, error: membershipError } = await supabase
+        .from('budget_group_members')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (membershipError || !membership) {
+        console.error('No access to group:', groupId);
+        return null;
+      }
+
+      const { data: budget, error } = await supabase
+        .from(TABLES.BUDGETS)
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('month', month)
+        .eq('year', year)
+        .eq('is_group_budget', true)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+      return budget;
+    } catch (error) {
+      console.error('Error getting group budget:', error);
+      return null;
+    }
+  }
+
+  async getPersonalTransactions() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('Getting personal transactions (group_id = null)');
+      
+      // Pobierz TYLKO transakcje osobiste (bez group_id)
+      const { data: transactions, error } = await supabase
+        .from(TABLES.TRANSACTIONS)
+        .select('*')
+        .eq('user_id', user.id)
+        .is('group_id', null)  // KLUCZOWE: tylko transakcje bez grupy
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching personal transactions:', error);
+        return [];
+      }
+
+      console.log(`Found ${transactions?.length || 0} personal transactions`);
+      return transactions || [];
+    } catch (error) {
+      console.error('Error getting personal transactions:', error);
+      return [];
+    }
+  }
+
+  async getPersonalSpendingSummary(month, year) {
+    try {
+      console.log(`Generating PERSONAL spending summary for ${month}/${year}`);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Pobierz TYLKO osobiste transakcje z danego miesiąca
+      const startDate = new Date(year, month, 1);
+      const endDate = new Date(year, month + 1, 0);
+      
+      const { data: transactions, error } = await supabase
+        .from(TABLES.TRANSACTIONS)
+        .select('*')
+        .eq('user_id', user.id)
+        .is('group_id', null)  // KLUCZOWE: tylko osobiste transakcje
+        .gte('date', startDate.toISOString())
+        .lte('date', endDate.toISOString());
+
+      if (error) throw error;
+
+      // Pobierz osobisty budżet
+      const { data: personalBudget } = await supabase
+        .from(TABLES.BUDGETS)
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('month', month)
+        .eq('year', year)
+        .is('group_id', null)  // KLUCZOWE: tylko osobisty budżet
+        .single();
+
+      const budgetAmount = personalBudget?.amount || 0;
+      const categories = await this.categoryController.getAllCategories();
+
+      // Oblicz dochody i wydatki
+      const totalIncome = transactions
+        .filter(t => t.is_income === true)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+        
+      const totalExpenses = transactions
+        .filter(t => t.is_income === false && !t.is_parent)
+        .reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+
+      // Oblicz wydatki per kategoria (tylko osobiste)
+      const spendingByCategory = categories.map(category => {
+        const categoryTransactions = transactions.filter(
+          t => t.category === category.id && t.is_income === false && !t.is_parent
+        );
+        
+        const spent = categoryTransactions.reduce((sum, t) => {
+          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+          return sum + amount;
+        }, 0);
+        
+        const remaining = category.budget - spent;
+        const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
+        
+        return {
+          category,
+          spent,
+          remaining: remaining > 0 ? remaining : 0,
+          percentage: percentage > 100 ? 100 : percentage,
+        };
+      });
+
+      const totalBudget = budgetAmount + totalIncome;
+
+      const summary = {
+        totalIncome,
+        totalExpenses,
+        balance: totalIncome - totalExpenses,
+        monthlyBudget: budgetAmount,
+        totalBudget: totalBudget,
+        spendingByCategory,
+        budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
+      };
+
+      console.log('Generated PERSONAL spending summary:', summary);
+      return summary;
+    } catch (error) {
+      console.error('Error generating personal spending summary:', error);
+      throw error;
+    }
+  }
+
+  async getGroupTransactions(groupId) {
+    try {
+      console.log('Getting transactions for group:', groupId);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź członkostwo w grupie
+      const { data: membership, error: membershipError } = await supabase
+        .from('budget_group_members')
+        .select('*')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (membershipError || !membership) {
+        console.error('No access to group:', groupId);
+        return [];
+      }
+
+      // Pobierz WSZYSTKIE transakcje grupy (od wszystkich członków)
+      const { data: transactions, error } = await supabase
+        .from(TABLES.TRANSACTIONS)
+        .select('*')
+        .eq('group_id', groupId)  // ✅ NIE filtruj po user_id!
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching group transactions:', error);
+        return [];
+      }
+
+      console.log(`Found ${transactions?.length || 0} transactions for group ${groupId} from all members`);
+      return transactions || [];
+    } catch (error) {
+      console.error('Error getting group transactions:', error);
+      return [];
     }
   }
 }
