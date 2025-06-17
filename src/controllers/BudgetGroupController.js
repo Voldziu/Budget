@@ -215,60 +215,108 @@ export class BudgetGroupController {
         throw new Error('Only group admins can view member list');
       }
 
-      // Pobierz wszystkich członków grupy wraz z danymi użytkowników
-      const { data, error } = await supabase
-        .from('budget_group_members')
-        .select(`
-          *,
-          profiles:user_id (
-            email,
-            full_name
-          )
-        `)
-        .eq('group_id', groupId)
-        .order('joined_at', { ascending: true });
-
-      if (error) {
-        console.error('Error getting group members:', error);
-        // Fallback - pobierz bez profili jeśli tabela profiles nie istnieje
-        const { data: membersOnly, error: fallbackError } = await supabase
+      // Najpierw spróbuj pobrać z auth.users (jeśli masz dostęp do tej tabeli)
+      try {
+        const { data, error } = await supabase
           .from('budget_group_members')
-          .select('*')
+          .select(`
+            *,
+            user:auth.users!user_id (
+              id,
+              email,
+              raw_user_meta_data
+            )
+          `)
           .eq('group_id', groupId)
           .order('joined_at', { ascending: true });
 
-        if (fallbackError) throw fallbackError;
+        if (!error && data) {
+          return data.map(member => ({
+            ...member,
+            email: member.user?.email || 'Unknown Email',
+            user_email: member.user?.email || 'Unknown Email',
+            full_name: member.user?.raw_user_meta_data?.full_name || 
+                      member.user?.raw_user_meta_data?.name || 
+                      member.user?.email?.split('@')[0] || 'Unknown User'
+          }));
+        }
+      } catch (authError) {
+        console.log('Auth.users not accessible, trying profiles fallback');
+      }
 
-        // Dodaj podstawowe informacje użytkowników z auth.users
-        const membersWithEmails = await Promise.all(
-          membersOnly.map(async (member) => {
-            try {
-              // To będzie działać tylko jeśli mamy dostęp do auth.users
-              // W przeciwnym razie zwrócimy member bez email
+      // Fallback 1: Spróbuj z tabelą profiles
+      try {
+        const { data, error } = await supabase
+          .from('budget_group_members')
+          .select(`
+            *,
+            profiles:user_id (
+              email,
+              full_name,
+              first_name,
+              last_name
+            )
+          `)
+          .eq('group_id', groupId)
+          .order('joined_at', { ascending: true });
+
+        if (!error && data) {
+          return data.map(member => ({
+            ...member,
+            email: member.profiles?.email || 'Unknown Email',
+            user_email: member.profiles?.email || 'Unknown Email',
+            full_name: member.profiles?.full_name || 
+                      `${member.profiles?.first_name || ''} ${member.profiles?.last_name || ''}`.trim() ||
+                      member.profiles?.email?.split('@')[0] || 
+                      'Unknown User'
+          }));
+        }
+      } catch (profilesError) {
+        console.log('Profiles table not accessible, using basic fallback');
+      }
+
+      // Fallback 2: Pobierz tylko członków bez dodatkowych danych i spróbuj pobrać email osobno
+      const { data: membersOnly, error: membersError } = await supabase
+        .from('budget_group_members')
+        .select('*')
+        .eq('group_id', groupId)
+        .order('joined_at', { ascending: true });
+
+      if (membersError) throw membersError;
+
+      // Dla każdego członka spróbuj pobrać dane użytkownika
+      const membersWithEmails = await Promise.all(
+        membersOnly.map(async (member) => {
+          try {
+            // Spróbuj pobrać dane użytkownika z Supabase Auth
+            const { data: userData, error: userError } = await supabase.auth.admin.getUserById(member.user_id);
+            
+            if (!userError && userData?.user) {
               return {
                 ...member,
-                email: 'User', // Placeholder
-                user_email: 'User'
-              };
-            } catch {
-              return {
-                ...member,
-                email: 'User',
-                user_email: 'User'
+                email: userData.user.email || 'Unknown Email',
+                user_email: userData.user.email || 'Unknown Email',
+                full_name: userData.user.user_metadata?.full_name || 
+                          userData.user.user_metadata?.name ||
+                          userData.user.email?.split('@')[0] || 
+                          'Unknown User'
               };
             }
-          })
-        );
+          } catch (adminError) {
+            console.log('Admin access not available for user:', member.user_id);
+          }
 
-        return membersWithEmails;
-      }
-      
-      return data?.map(member => ({
-        ...member,
-        email: member.profiles?.email || 'Unknown',
-        user_email: member.profiles?.email || 'Unknown',
-        full_name: member.profiles?.full_name
-      })) || [];
+          // Ostatni fallback - zwróć podstawowe info
+          return {
+            ...member,
+            email: `User ${member.user_id.substring(0, 8)}`,
+            user_email: `User ${member.user_id.substring(0, 8)}`,
+            full_name: `User ${member.user_id.substring(0, 8)}`
+          };
+        })
+      );
+
+      return membersWithEmails;
     } catch (error) {
       console.error('Error getting group members:', error);
       throw error;
