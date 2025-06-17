@@ -307,70 +307,96 @@ export class BudgetGroupController {
 
       console.log('Fetching group members from database...');
 
-      // Get members with their profiles
-      const { data: members, error } = await supabase
+      // ROZWIĄZANIE 1: Najpierw pobierz członków grupy, potem profile
+      const { data: members, error: membersError } = await supabase
         .from('budget_group_members')
-        .select(`
-          *,
-          profiles:user_id (
-            email,
-            full_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('group_id', groupId)
         .order('joined_at', { ascending: true });
 
-      if (error) {
-        console.error('Error fetching group members:', error);
-        throw error;
+      if (membersError) {
+        console.error('Error fetching group members:', membersError);
+        throw membersError;
       }
 
       console.log(`Fetched ${members?.length || 0} members from database`);
 
-      // Process members and handle missing profiles
-      const membersWithEmails = await Promise.all(
-        (members || []).map(async (member) => {
-          let email = member.profiles?.email;
-          let fullName = member.profiles?.full_name;
-          let avatarUrl = member.profiles?.avatar_url;
+      if (!members || members.length === 0) {
+        return [];
+      }
 
-          // If no profile exists, try to create one or use fallback
-          if (!member.profiles) {
-            console.log(`No profile found for user ${member.user_id}, creating fallback`);
+      // Pobierz profile dla wszystkich członków
+      const userIds = members.map(member => member.user_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('id', userIds);
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        // Kontynuuj bez profili - użyj fallback
+      }
+
+      console.log(`Fetched ${profiles?.length || 0} profiles`);
+
+      // Połącz dane członków z profilami
+      const membersWithEmails = await Promise.all(
+        members.map(async (member) => {
+          // Znajdź profil dla tego członka
+          const profile = profiles?.find(p => p.id === member.user_id);
+          
+          let email = profile?.email;
+          let fullName = profile?.full_name;
+          let avatarUrl = profile?.avatar_url;
+
+          // Jeśli nie ma profilu, spróbuj go utworzyć lub użyj fallback
+          if (!profile) {
+            console.log(`No profile found for user ${member.user_id}, attempting to create/fallback`);
             
-            // Try to get profile data and create if needed
             try {
-              // This will only work for the current user
+              // Dla aktualnego użytkownika - użyj danych z auth
               if (member.user_id === user.id) {
                 await ProfileSync.ensureUserProfile();
-                const profile = await ProfileSync.getProfile();
-                if (profile) {
-                  email = profile.email;
-                  fullName = profile.full_name;
-                  avatarUrl = profile.avatar_url;
+                const userProfile = await ProfileSync.getProfile();
+                if (userProfile) {
+                  email = userProfile.email;
+                  fullName = userProfile.full_name;
+                  avatarUrl = userProfile.avatar_url;
                 }
               } else {
-                // For other users, create a basic profile entry
+                // Dla innych użytkowników - stwórz podstawowy profil
                 const basicProfile = {
                   id: member.user_id,
                   email: `user-${member.user_id.substring(0, 8)}@unknown.com`,
                   full_name: `User ${member.user_id.substring(0, 8)}`
                 };
 
-                const { error: insertError } = await supabase
+                const { data: createdProfile, error: insertError } = await supabase
                   .from('profiles')
                   .insert(basicProfile)
                   .select()
                   .single();
 
-                if (!insertError || insertError.code === '23505') { // Ignore duplicate
-                  email = basicProfile.email;
-                  fullName = basicProfile.full_name;
+                if (!insertError) {
+                  email = createdProfile.email;
+                  fullName = createdProfile.full_name;
+                } else if (insertError.code === '23505') {
+                  // Profil już istnieje, spróbuj go pobrać
+                  const { data: existingProfile } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', member.user_id)
+                    .single();
+                  
+                  if (existingProfile) {
+                    email = existingProfile.email;
+                    fullName = existingProfile.full_name;
+                    avatarUrl = existingProfile.avatar_url;
+                  }
                 }
               }
             } catch (profileError) {
-              console.error('Error creating profile:', profileError);
+              console.error('Error creating/fetching profile:', profileError);
             }
 
             // Ultimate fallback
@@ -386,12 +412,18 @@ export class BudgetGroupController {
             user_email: email || 'Unknown Email',
             full_name: fullName || email?.split('@')[0] || 'Unknown User',
             avatar_url: avatarUrl,
-            display_name: fullName || email?.split('@')[0] || `User ${member.user_id.substring(0, 8)}`
+            display_name: fullName || email?.split('@')[0] || `User ${member.user_id.substring(0, 8)}`,
+            // Dodaj profile object dla kompatybilności z poprzednim kodem
+            profiles: profile ? {
+              email: email,
+              full_name: fullName,
+              avatar_url: avatarUrl
+            } : null
           };
         })
       );
 
-      console.log('Processed members with email data');
+      console.log('Processed members with email data:', membersWithEmails);
 
       // Cache the result
       await this.setCache(cacheKey, membersWithEmails, this.defaultCacheTTL);
