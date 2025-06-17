@@ -1410,6 +1410,7 @@ const AddTransactionScreen = ({route, navigation}) => {
         categories={categories}
         receiptImage={receiptImage}
         storeName={storeName}
+        selectedGroupId ={selectedGroupId}
       />
     {!isOnline && receiptImage && (
         <Text style={styles.offlineWarning}>
