@@ -423,4 +423,291 @@ export class OfflineBudgetController extends SupabaseBudgetController {
     
     console.log('=== END BUDGET DEBUG ===');
   }
+
+  // src/controllers/OfflineBudgetController.js - Enhanced Group Support Methods
+// Add these methods to your existing OfflineBudgetController class
+
+/**
+ * Get group budget for a specific group, month, and year
+ */
+async getGroupBudget(groupId, month, year) {
+  try {
+    console.log(`Getting group budget for group ${groupId}, ${month}/${year}`);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check if user is member of the group
+    const { data: membership, error: membershipError } = await supabase
+      .from('budget_group_members')
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (membershipError || !membership) {
+      throw new Error('No access to group budget');
+    }
+
+    // Get group budget
+    const { data: groupBudget, error } = await supabase
+      .from(TABLES.BUDGETS)
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('month', month)
+      .eq('year', year)
+      .eq('is_group_budget', true)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      throw error;
+    }
+
+    // Return existing budget or create default
+    return groupBudget || {
+      amount: 0,
+      month: month,
+      year: year,
+      group_id: groupId,
+      is_group_budget: true
+    };
+
+  } catch (error) {
+    console.error('Error getting group budget:', error);
+    throw error;
+  }
+}
+
+/**
+ * Set group budget for a specific group
+ */
+async setGroupBudget(groupId, budgetData) {
+  try {
+    console.log(`Setting group budget for group ${groupId}:`, budgetData);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check if user is admin/owner of the group
+    const { data: membership, error: membershipError } = await supabase
+      .from('budget_group_members')
+      .select('role')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (membershipError || !membership) {
+      throw new Error('No access to group');
+    }
+
+    if (membership.role !== 'admin' && membership.role !== 'owner') {
+      throw new Error('Only admins and owners can modify group budget');
+    }
+
+    const budgetToSave = {
+      ...budgetData,
+      group_id: groupId,
+      is_group_budget: true,
+      user_id: user.id, // Creator of the budget entry
+      updated_at: new Date().toISOString()
+    };
+
+    // Check if budget already exists
+    const { data: existingBudget } = await supabase
+      .from(TABLES.BUDGETS)
+      .select('id')
+      .eq('group_id', groupId)
+      .eq('month', budgetData.month)
+      .eq('year', budgetData.year)
+      .eq('is_group_budget', true)
+      .single();
+
+    if (existingBudget) {
+      // Update existing budget
+      const { data, error } = await supabase
+        .from(TABLES.BUDGETS)
+        .update(budgetToSave)
+        .eq('id', existingBudget.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } else {
+      // Create new budget
+      const { data, error } = await supabase
+        .from(TABLES.BUDGETS)
+        .insert(budgetToSave)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    }
+
+  } catch (error) {
+    console.error('Error setting group budget:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get spending summary for a specific group
+ */
+async getGroupSpendingSummary(month, year, groupId) {
+  try {
+    console.log(`Generating GROUP spending summary for group ${groupId}, ${month}/${year}`);
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    // Check if user is member of the group
+    const { data: membership, error: membershipError } = await supabase
+      .from('budget_group_members')
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (membershipError || !membership) {
+      console.error('No access to group:', groupId);
+      return {
+        totalIncome: 0,
+        totalExpenses: 0,
+        balance: 0,
+        spendingByCategory: [],
+        monthlyBudget: 0,
+        totalBudget: 0,
+        budgetPercentage: 0
+      };
+    }
+
+    // Get group transactions from this month
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0);
+    
+    const { data: transactions, error } = await supabase
+      .from(TABLES.TRANSACTIONS)
+      .select('*')
+      .eq('group_id', groupId)
+      .gte('date', startDate.toISOString())
+      .lte('date', endDate.toISOString());
+
+    if (error) throw error;
+
+    // Get group budget
+    const { data: groupBudget } = await supabase
+      .from(TABLES.BUDGETS)
+      .select('*')
+      .eq('group_id', groupId)
+      .eq('month', month)
+      .eq('year', year)
+      .eq('is_group_budget', true)
+      .single();
+
+    const budgetAmount = groupBudget?.amount || 0;
+    const categories = await this.categoryController.getAllCategories();
+
+    // Calculate income and expenses
+    const totalIncome = transactions
+      .filter(t => t.is_income === true)
+      .reduce((sum, t) => {
+        const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+        return sum + amount;
+      }, 0);
+      
+    const totalExpenses = transactions
+      .filter(t => t.is_income === false && !t.is_parent)
+      .reduce((sum, t) => {
+        const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+        return sum + amount;
+      }, 0);
+
+    // Calculate spending per category
+    const spendingByCategory = categories.map(category => {
+      const categoryTransactions = transactions.filter(
+        t => t.category === category.id && t.is_income === false && !t.is_parent
+      );
+      
+      const spent = categoryTransactions.reduce((sum, t) => {
+        const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
+        return sum + amount;
+      }, 0);
+      
+      const remaining = category.budget - spent;
+      const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
+      
+      return {
+        category,
+        spent,
+        remaining: remaining > 0 ? remaining : 0,
+        percentage: percentage > 100 ? 100 : percentage,
+      };
+    });
+
+    const totalBudget = budgetAmount + totalIncome;
+
+    const summary = {
+      totalIncome,
+      totalExpenses,
+      balance: totalIncome - totalExpenses,
+      monthlyBudget: budgetAmount,
+      totalBudget: totalBudget,
+      spendingByCategory,
+      budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0,
+    };
+
+    console.log('Group spending summary generated:', summary);
+    return summary;
+
+  } catch (error) {
+    console.error('Error generating group spending summary:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get user's role in a specific group
+ */
+async getUserRole(groupId) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not authenticated');
+
+    const { data: membership, error } = await supabase
+      .from('budget_group_members')
+      .select('role')
+      .eq('group_id', groupId)
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) {
+      console.error('Error getting user role:', error);
+      return 'member'; // Default role
+    }
+
+    return membership.role || 'member';
+  } catch (error) {
+    console.error('Error getting user role:', error);
+    return 'member';
+  }
+}
+
+/**
+ * Enhanced getSpendingSummary to handle both personal and group budgets
+ */
+async getSpendingSummary(month, year, groupId = null) {
+  try {
+    if (groupId === null || groupId === 'personal') {
+      // Use existing personal budget method
+      return await this.getPersonalSpendingSummary(month, year);
+    } else {
+      // Use new group budget method
+      return await this.getGroupSpendingSummary(month, year, groupId);
+    }
+  } catch (error) {
+    console.error('Error in getSpendingSummary:', error);
+    throw error;
+  }
+}
 }
