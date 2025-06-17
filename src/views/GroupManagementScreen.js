@@ -1,4 +1,4 @@
-// src/views/GroupManagementScreen.js - Fixed version with consistent design and proper member display
+// src/views/GroupManagementScreen.js - POPRAWIONY z kompletnym modalem tworzenia grupy
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -66,6 +66,9 @@ const GroupManagementScreen = ({ navigation }) => {
         groupController.getMyInvitations()
       ]);
       
+      console.log('Loaded groups:', userGroups.length);
+      console.log('Loaded invitations:', userInvitations.length);
+      
       setGroups(userGroups);
       setInvitations(userInvitations);
       
@@ -109,22 +112,30 @@ const GroupManagementScreen = ({ navigation }) => {
     }
   };
 
+  // POPRAWIONA - funkcja tworzenia grupy
   const handleCreateGroup = async () => {
+    console.log('Creating group with name:', newGroupName);
+    
     if (!newGroupName.trim()) {
       Alert.alert('Error', 'Please enter a group name');
       return;
     }
 
     try {
+      console.log('Calling groupController.createGroup...');
       await groupController.createGroup(newGroupName.trim(), newGroupDescription.trim());
+      
+      // Reset form
       setNewGroupName('');
       setNewGroupDescription('');
       setShowCreateModal(false);
+      
+      // Reload data
       await loadData();
       Alert.alert('Success', 'Group created successfully!');
     } catch (error) {
       console.error('Error creating group:', error);
-      Alert.alert('Error', 'Failed to create group');
+      Alert.alert('Error', 'Failed to create group: ' + error.message);
     }
   };
 
@@ -237,19 +248,19 @@ const GroupManagementScreen = ({ navigation }) => {
               ]}
             >
               <TouchableOpacity
-                onPress={() => handleGroupSelect(group)}
-                activeOpacity={0.8}
                 style={styles.groupCardTouchable}
+                onPress={() => handleGroupSelect(group)}
               >
                 <View style={styles.groupCardHeader}>
                   <View style={[styles.groupIconContainer, { backgroundColor: theme.colors.primary + '20' }]}>
                     <Icon name="users" size={20} color={theme.colors.primary} />
                   </View>
+                  
                   <View style={styles.groupCardInfo}>
-                    <Text style={[styles.groupCardName, { color: theme.colors.text }]}>
-                      {group.name}
-                    </Text>
                     <View style={styles.groupCardMeta}>
+                      <Text style={[styles.groupCardName, { color: theme.colors.text }]}>
+                        {group.name}
+                      </Text>
                       <View style={[
                         styles.roleChip,
                         { 
@@ -335,15 +346,16 @@ const GroupManagementScreen = ({ navigation }) => {
               styles.inviteInputContainer,
               {
                 backgroundColor: isDark 
-                  ? 'rgba(255, 255, 255, 0.1)' 
-                  : 'rgba(0, 0, 0, 0.05)'
+                  ? 'rgba(255, 255, 255, 0.05)' 
+                  : 'rgba(0, 0, 0, 0.02)',
+                borderColor: isDark
+                  ? 'rgba(255, 255, 255, 0.1)'
+                  : 'rgba(0, 0, 0, 0.08)',
               }
             ]}>
-              <Icon name="mail" size={16} color={theme.colors.textSecondary} style={styles.inputIcon} />
+              <Icon name="mail" size={16} color={theme.colors.textSecondary} />
               <TextInput
-                style={[styles.modernInput, { 
-                  color: theme.colors.text,
-                }]}
+                style={[styles.inviteInput, { color: theme.colors.text }]}
                 placeholder="Enter email address"
                 placeholderTextColor={theme.colors.textSecondary}
                 value={inviteEmail}
@@ -352,18 +364,20 @@ const GroupManagementScreen = ({ navigation }) => {
                 autoCapitalize="none"
               />
             </View>
+            
             <TouchableOpacity
-              style={[styles.modernSendButton, { backgroundColor: theme.colors.primary }]}
+              style={[styles.modernInviteButton, { backgroundColor: theme.colors.primary }]}
               onPress={handleSendInvite}
             >
               <Icon name="send" size={16} color="#FFFFFF" />
+              <Text style={styles.modernInviteButtonText}>Send</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Members List */}
         <View style={[
-          styles.modernCard, 
+          styles.modernCard,
           { 
             backgroundColor: isDark 
               ? 'rgba(255, 255, 255, 0.05)' 
@@ -373,285 +387,251 @@ const GroupManagementScreen = ({ navigation }) => {
               : 'rgba(0, 0, 0, 0.05)',
           }
         ]}>
-          <View style={styles.cardHeaderWithAction}>
-            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
-              Members ({groupMembers.length})
-            </Text>
-            {loadingMembers && (
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-            )}
-          </View>
+          <Text style={[styles.cardTitle, { color: theme.colors.text }]}>
+            Group Members ({groupMembers.length})
+          </Text>
           
-          {groupMembers.length === 0 && !loadingMembers ? (
-            <Text style={[styles.noMembersText, { color: theme.colors.textSecondary }]}>
-              No members found
-            </Text>
+          {loadingMembers ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={theme.colors.primary} />
+              <Text style={[styles.loadingText, { color: theme.colors.textSecondary }]}>
+                Loading members...
+              </Text>
+            </View>
           ) : (
-            groupMembers.map((member, index) => {
-              // Improved member email display logic
-              const memberEmail = member.profiles?.email || member.email || member.user_email || 'Unknown User';
-              const displayName = member.profiles?.full_name || memberEmail;
-              
-              return (
-                <Animated.View
-                  key={member.id}
-                  style={[
-                    styles.modernMemberCard,
-                    { 
-                      backgroundColor: isDark 
-                        ? 'rgba(255, 255, 255, 0.03)' 
-                        : 'rgba(0, 0, 0, 0.02)'
-                    }
-                  ]}
-                >
-                  <View style={styles.memberCardContent}>
+            <ScrollView style={styles.membersList}>
+              {groupMembers.map(member => (
+                <View key={member.id} style={[
+                  styles.modernMemberItem,
+                  {
+                    backgroundColor: isDark 
+                      ? 'rgba(255, 255, 255, 0.02)' 
+                      : 'rgba(0, 0, 0, 0.01)',
+                    borderBottomColor: isDark
+                      ? 'rgba(255, 255, 255, 0.05)'
+                      : 'rgba(0, 0, 0, 0.05)',
+                  }
+                ]}>
+                  <View style={styles.memberInfo}>
                     <View style={[styles.memberAvatar, { backgroundColor: theme.colors.primary + '20' }]}>
                       <Text style={[styles.memberAvatarText, { color: theme.colors.primary }]}>
-                        {displayName[0].toUpperCase()}
+                        {(member.full_name || member.email || 'U').charAt(0).toUpperCase()}
                       </Text>
-                    </View>
-                    <View style={styles.memberInfo}>
-                      <Text style={[styles.memberName, { color: theme.colors.text }]}>
-                        {displayName}
-                      </Text>
-                      <View style={styles.memberMetaRow}>
-                        <View style={[
-                          styles.memberRoleChip,
-                          { 
-                            backgroundColor: member.role === 'admin' 
-                              ? theme.colors.success + '20' 
-                              : theme.colors.info + '20' 
-                          }
-                        ]}>
-                          <Text style={[
-                            styles.memberRoleText,
-                            { 
-                              color: member.role === 'admin' 
-                                ? theme.colors.success 
-                                : theme.colors.info 
-                            }
-                          ]}>
-                            {member.role}
-                          </Text>
-                        </View>
-                        <Text style={[styles.memberJoinDate, { color: theme.colors.textSecondary }]}>
-                          {new Date(member.joined_at).toLocaleDateString()}
-                        </Text>
-                      </View>
                     </View>
                     
-                    {member.role !== 'admin' && (
-                      <TouchableOpacity
-                        style={[styles.modernRemoveButton, { backgroundColor: theme.colors.error + '20' }]}
-                        onPress={() => handleRemoveMember(member.user_id, memberEmail)}
-                      >
-                        <Icon name="user-minus" size={14} color={theme.colors.error} />
-                      </TouchableOpacity>
-                    )}
+                    <View style={styles.memberDetails}>
+                      <Text style={[styles.memberName, { color: theme.colors.text }]}>
+                        {member.full_name || 'Unknown User'}
+                      </Text>
+                      <Text style={[styles.memberEmail, { color: theme.colors.textSecondary }]}>
+                        {member.email}
+                      </Text>
+                    </View>
+                    
+                    <View style={[
+                      styles.modernRoleChip,
+                      { 
+                        backgroundColor: member.role === 'admin' 
+                          ? theme.colors.success + '20' 
+                          : theme.colors.info + '20' 
+                      }
+                    ]}>
+                      <Text style={[
+                        styles.modernRoleText,
+                        { 
+                          color: member.role === 'admin' 
+                            ? theme.colors.success 
+                            : theme.colors.info 
+                        }
+                      ]}>
+                        {member.role}
+                      </Text>
+                    </View>
                   </View>
-                </Animated.View>
-              );
-            })
+                  
+                  {member.role !== 'admin' && (
+                    <TouchableOpacity
+                      style={[styles.modernRemoveButton, { backgroundColor: theme.colors.error + '20' }]}
+                      onPress={() => handleRemoveMember(member.id, member.email)}
+                    >
+                      <Icon name="trash-2" size={16} color={theme.colors.error} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
           )}
         </View>
       </View>
     );
   };
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'groups':
-        return renderGroupsTab();
-      case 'members':
-        return renderMembersTab();
-      default:
-        return renderGroupsTab();
-    }
-  };
-
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <StatusBar 
-          backgroundColor="transparent" 
-          translucent 
-          barStyle={isDark ? "light-content" : "dark-content"} 
-        />
-        
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={[styles.loadingText, { color: theme.colors.text }]}>Loading groups...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={[styles.container, styles.loadingContainer, { backgroundColor: theme.colors.background }]}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+          Loading groups...
+        </Text>
+      </View>
     );
   }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar 
-        backgroundColor="transparent" 
-        translucent 
-        barStyle={isDark ? "light-content" : "dark-content"} 
+        barStyle={isDark ? 'light-content' : 'dark-content'} 
+        backgroundColor={theme.colors.background} 
       />
       
-      {/* Consistent Header - no gradient background */}
       <Animated.View 
         style={[
-          styles.modernHeader,
+          styles.container,
           {
-            backgroundColor: theme.colors.background,
-            borderBottomColor: isDark 
-              ? 'rgba(255, 255, 255, 0.1)' 
-              : 'rgba(0, 0, 0, 0.05)',
             opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
+            transform: [{ translateY: slideAnim }]
           }
         ]}
       >
-        <TouchableOpacity 
-          style={[
-            styles.headerButton,
-            {
-              backgroundColor: isDark 
-                ? 'rgba(255, 255, 255, 0.1)' 
-                : 'rgba(0, 0, 0, 0.05)'
-            }
-          ]}
-          onPress={() => navigation.goBack()}
-        >
-          <Icon name="arrow-left" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.modernHeaderTitle, { color: theme.colors.text }]}>Group Management</Text>
-        <TouchableOpacity 
-          style={[
-            styles.headerButton,
-            { backgroundColor: theme.colors.primary }
-          ]}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <Icon name="plus" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Tab Navigation */}
-      <Animated.View 
-        style={[
-          styles.tabNavigation,
-          {
-            backgroundColor: theme.colors.background,
-            opacity: fadeAnim,
-          }
-        ]}
-      >
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            {
-              backgroundColor: activeTab === 'groups' 
-                ? theme.colors.primary 
-                : isDark 
-                  ? 'rgba(255, 255, 255, 0.1)' 
-                  : 'rgba(0, 0, 0, 0.05)'
-            }
-          ]}
-          onPress={() => setActiveTab('groups')}
-        >
-          <Icon 
-            name="users" 
-            size={16} 
-            color={activeTab === 'groups' ? '#FFFFFF' : theme.colors.textSecondary} 
-          />
-          <Text style={[
-            styles.tabButtonText,
-            { color: activeTab === 'groups' ? '#FFFFFF' : theme.colors.textSecondary }
-          ]}>
-            Groups
+        {/* Modern Header */}
+        <View style={[styles.modernHeader, { borderBottomColor: theme.colors.border }]}>
+          <TouchableOpacity 
+            style={[styles.headerButton, { backgroundColor: theme.colors.surface }]}
+            onPress={() => navigation.goBack()}
+          >
+            <Icon name="arrow-left" size={20} color={theme.colors.text} />
+          </TouchableOpacity>
+          
+          <Text style={[styles.modernHeaderTitle, { color: theme.colors.text }]}>
+            Group Management
           </Text>
-          {groups.length > 0 && (
-            <View style={[
-              styles.tabBadge, 
+          
+          <TouchableOpacity 
+            style={[styles.headerButton, { backgroundColor: theme.colors.primary }]}
+            onPress={() => setShowCreateModal(true)}
+          >
+            <Icon name="plus" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Tab Navigation */}
+        <View style={styles.tabNavigation}>
+          <TouchableOpacity
+            style={[
+              styles.tabButton,
               { 
                 backgroundColor: activeTab === 'groups' 
-                  ? 'rgba(255, 255, 255, 0.3)' 
-                  : theme.colors.primary 
+                  ? theme.colors.primary 
+                  : 'transparent' 
+              }
+            ]}
+            onPress={() => setActiveTab('groups')}
+          >
+            <Icon 
+              name="users" 
+              size={16} 
+              color={activeTab === 'groups' ? '#FFFFFF' : theme.colors.textSecondary} 
+            />
+            <Text style={[
+              styles.tabButtonText,
+              { 
+                color: activeTab === 'groups' ? '#FFFFFF' : theme.colors.textSecondary 
               }
             ]}>
-              <Text style={[
-                styles.tabBadgeText,
-                { color: activeTab === 'groups' ? '#FFFFFF' : '#FFFFFF' }
+              Groups
+            </Text>
+            {groups.length > 0 && (
+              <View style={[
+                styles.tabBadge,
+                { 
+                  backgroundColor: activeTab === 'groups' 
+                    ? 'rgba(255, 255, 255, 0.3)' 
+                    : theme.colors.primary 
+                }
               ]}>
-                {groups.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
+                <Text style={[
+                  styles.tabBadgeText,
+                  { 
+                    color: activeTab === 'groups' ? '#FFFFFF' : '#FFFFFF' 
+                  }
+                ]}>
+                  {groups.length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[
-            styles.tabButton,
-            {
-              backgroundColor: activeTab === 'members' 
-                ? theme.colors.primary 
-                : isDark 
-                  ? 'rgba(255, 255, 255, 0.1)' 
-                  : 'rgba(0, 0, 0, 0.05)'
-            }
-          ]}
-          onPress={() => setActiveTab('members')}
-        >
-          <Icon 
-            name="user-check" 
-            size={16} 
-            color={activeTab === 'members' ? '#FFFFFF' : theme.colors.textSecondary} 
-          />
-          <Text style={[
-            styles.tabButtonText,
-            { color: activeTab === 'members' ? '#FFFFFF' : theme.colors.textSecondary }
-          ]}>
-            Members
-          </Text>
-          {selectedGroup && groupMembers.length > 0 && (
-            <View style={[
-              styles.tabBadge, 
+          <TouchableOpacity
+            style={[
+              styles.tabButton,
               { 
                 backgroundColor: activeTab === 'members' 
-                  ? 'rgba(255, 255, 255, 0.3)' 
-                  : theme.colors.primary 
+                  ? theme.colors.primary 
+                  : 'transparent' 
+              }
+            ]}
+            onPress={() => setActiveTab('members')}
+          >
+            <Icon 
+              name="user-check" 
+              size={16} 
+              color={activeTab === 'members' ? '#FFFFFF' : theme.colors.textSecondary} 
+            />
+            <Text style={[
+              styles.tabButtonText,
+              { 
+                color: activeTab === 'members' ? '#FFFFFF' : theme.colors.textSecondary 
               }
             ]}>
-              <Text style={[
-                styles.tabBadgeText,
-                { color: activeTab === 'members' ? '#FFFFFF' : '#FFFFFF' }
+              Members
+            </Text>
+            {groupMembers.length > 0 && (
+              <View style={[
+                styles.tabBadge,
+                { 
+                  backgroundColor: activeTab === 'members' 
+                    ? 'rgba(255, 255, 255, 0.3)' 
+                    : theme.colors.primary 
+                }
               ]}>
-                {groupMembers.length}
-              </Text>
-            </View>
-          )}
-        </TouchableOpacity>
+                <Text style={[
+                  styles.tabBadgeText,
+                  { 
+                    color: activeTab === 'members' ? '#FFFFFF' : '#FFFFFF' 
+                  }
+                ]}>
+                  {groupMembers.length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Content Container */}
+        <View style={styles.contentContainer}>
+          {activeTab === 'groups' ? renderGroupsTab() : renderMembersTab()}
+        </View>
       </Animated.View>
 
-      {/* Content */}
-      <Animated.View 
-        style={[
-          styles.contentContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          }
-        ]}
-      >
-        {renderContent()}
-      </Animated.View>
-
-      {/* Create Group Modal */}
+      {/* POPRAWIONY Create Group Modal z kompletnym formularzem */}
       <Modal
         visible={showCreateModal}
+        animationType="slide"
         transparent={true}
-        animationType="fade"
         onRequestClose={() => setShowCreateModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <Animated.View style={styles.modernModalContent}>
+          <Animated.View style={[
+            styles.modernModalContent,
+            {
+              backgroundColor: isDark 
+                ? 'rgba(30, 30, 30, 0.95)' 
+                : 'rgba(255, 255, 255, 0.95)',
+              borderColor: isDark
+                ? 'rgba(255, 255, 255, 0.1)'
+                : 'rgba(0, 0, 0, 0.05)',
+            }
+          ]}>
             <View style={[
               styles.modalContainer,
               {
@@ -683,9 +663,36 @@ const GroupManagementScreen = ({ navigation }) => {
               </View>
 
               <View style={styles.modalBody}>
+                {/* Group Name Input - DODANE */}
                 <View style={styles.inputGroup}>
                   <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
-                    Group Name
+                    Group Name *
+                  </Text>
+                  <TextInput
+                    style={[
+                      styles.modernModalInput,
+                      { 
+                        color: theme.colors.text,
+                        backgroundColor: isDark 
+                          ? 'rgba(255, 255, 255, 0.05)' 
+                          : 'rgba(0, 0, 0, 0.02)',
+                        borderColor: isDark
+                          ? 'rgba(255, 255, 255, 0.1)'
+                          : 'rgba(0, 0, 0, 0.08)',
+                      }
+                    ]}
+                    placeholder="Enter group name"
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={newGroupName}
+                    onChangeText={setNewGroupName}
+                    autoFocus={true}
+                  />
+                </View>
+
+                {/* Group Description Input */}
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.inputLabel, { color: theme.colors.text }]}>
+                    Description (Optional)
                   </Text>
                   <TextInput
                     style={[
@@ -878,6 +885,7 @@ const styles = StyleSheet.create({
   groupCardMeta: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
   },
   roleChip: {
     paddingHorizontal: 8,
@@ -887,28 +895,21 @@ const styles = StyleSheet.create({
   roleChipText: {
     fontSize: 12,
     fontWeight: '600',
-    textTransform: 'capitalize',
   },
   groupDescription: {
-    marginTop: 12,
     fontSize: 14,
+    marginTop: 8,
     lineHeight: 20,
   },
   modernCard: {
     borderRadius: 20,
     padding: 20,
-    marginBottom: 16,
+    marginBottom: 20,
     borderWidth: 1,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: '700',
-    marginBottom: 16,
-  },
-  cardHeaderWithAction: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: 16,
   },
   inviteContainer: {
@@ -919,76 +920,76 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 16,
     paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 8,
   },
-  inputIcon: {
-    marginRight: 12,
-  },
-  modernInput: {
+  inviteInput: {
     flex: 1,
     fontSize: 16,
-    paddingVertical: 14,
   },
-  modernSendButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
+  modernInviteButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-  },
-  noMembersText: {
-    textAlign: 'center',
-    fontStyle: 'italic',
-    padding: 30,
-    fontSize: 16,
-  },
-  modernMemberCard: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    gap: 6,
   },
-  memberCardContent: {
+  modernInviteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  membersList: {
+    maxHeight: 300,
+  },
+  modernMemberItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  memberInfo: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
   },
   memberAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 12,
   },
   memberAvatarText: {
     fontSize: 16,
     fontWeight: '700',
   },
-  memberInfo: {
+  memberDetails: {
     flex: 1,
   },
   memberName: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  memberMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  memberEmail: {
+    fontSize: 14,
   },
-  memberRoleChip: {
+  modernRoleChip: {
     paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 12,
   },
-  memberRoleText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  memberJoinDate: {
+  modernRoleText: {
     fontSize: 12,
+    fontWeight: '600',
   },
   modernRemoveButton: {
     width: 36,

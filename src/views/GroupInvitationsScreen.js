@@ -1,4 +1,4 @@
-// src/views/GroupInvitationsScreen.js
+// src/views/GroupInvitationsScreen.js - POPRAWIONY z lepszym debugowaniem
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -9,10 +9,12 @@ import {
   ScrollView,
   ActivityIndicator,
   SafeAreaView,
+  RefreshControl,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
 import { BudgetGroupController } from '../controllers/BudgetGroupController';
 import { useTheme } from '../utils/ThemeContext';
+import { supabase } from '../utils/supabase';
 
 const GroupInvitationsScreen = ({ navigation }) => {
   const [myInvitations, setMyInvitations] = useState([]);
@@ -22,51 +24,114 @@ const GroupInvitationsScreen = ({ navigation }) => {
   const groupController = new BudgetGroupController();
 
   useEffect(() => {
+    console.log('GroupInvitationsScreen mounted');
     loadInvitations();
   }, []);
 
   const loadInvitations = async () => {
-    console.log('Loading invitations...');
+    console.log('🔄 Starting to load invitations...');
     setLoading(true);
+    
     try {
+      // Debug: sprawdź czy użytkownik jest zalogowany
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('👤 Current user:', user?.id, user?.email);
+      
+      if (!user || !user.email) {
+        console.error('❌ No authenticated user or email found');
+        Alert.alert('Error', 'You must be logged in to view invitations');
+        return;
+      }
+
+      console.log('📧 Loading invitations for email:', user.email);
       const invitations = await groupController.getMyInvitations();
-      console.log('Loaded invitations:', invitations);
-      setMyInvitations(invitations);
+      
+      console.log('📨 Raw invitations response:', JSON.stringify(invitations, null, 2));
+      console.log('📊 Invitations count:', invitations?.length || 0);
+      
+      // Debug: sprawdź strukturę każdego zaproszenia
+      invitations?.forEach((inv, index) => {
+        console.log(`📝 Invitation ${index}:`, {
+          id: inv.id,
+          invited_email: inv.invited_email,
+          status: inv.status,
+          group_name: inv.budget_groups?.name,
+          group_id: inv.group_id
+        });
+      });
+
+      setMyInvitations(invitations || []);
+      
+      if (invitations?.length > 0) {
+        console.log('✅ Successfully loaded', invitations.length, 'invitations');
+      } else {
+        console.log('ℹ️ No pending invitations found');
+      }
+      
     } catch (error) {
-      console.error('Error loading invitations:', error);
+      console.error('❌ Error loading invitations:', error);
+      console.error('❌ Error details:', error.message);
+      console.error('❌ Error stack:', error.stack);
       Alert.alert('Error', 'Failed to load invitations: ' + error.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
-      console.log('Loading complete.');
+      console.log('✅ Loading invitations completed');
     }
   };
 
   const handleAcceptInvitation = async (invitationId) => {
+    console.log('✅ Attempting to accept invitation:', invitationId);
+    
     try {
-      console.log('Accepting invitation:', invitationId);
+      // Znajdź zaproszenie w lokalnym stanie
+      const invitation = myInvitations.find(inv => inv.id === invitationId);
+      console.log('📝 Invitation details:', invitation);
+      
+      if (!invitation) {
+        console.error('❌ Invitation not found in local state');
+        Alert.alert('Error', 'Invitation not found');
+        return;
+      }
+
+      console.log('🔄 Calling acceptInvitation...');
       await groupController.acceptInvitation(invitationId);
+      
+      console.log('✅ Invitation accepted successfully');
       Alert.alert('Success', 'Invitation accepted!');
-      loadInvitations(); // Refresh list
+      
+      // Odśwież listę zaproszeń
+      await loadInvitations();
+      
     } catch (error) {
-      console.error('Error accepting invitation:', error);
+      console.error('❌ Error accepting invitation:', error);
+      console.error('❌ Error message:', error.message);
       Alert.alert('Error', 'Failed to accept invitation: ' + error.message);
     }
   };
 
   const handleRejectInvitation = async (invitationId) => {
+    console.log('❌ Attempting to reject invitation:', invitationId);
+    
     try {
-      console.log('Rejecting invitation:', invitationId);
+      console.log('🔄 Calling rejectInvitation...');
       await groupController.rejectInvitation(invitationId);
+      
+      console.log('✅ Invitation rejected successfully');
       Alert.alert('Success', 'Invitation rejected');
-      loadInvitations(); // Refresh list
+      
+      // Odśwież listę zaproszeń
+      await loadInvitations();
+      
     } catch (error) {
-      console.error('Error rejecting invitation:', error);
+      console.error('❌ Error rejecting invitation:', error);
+      console.error('❌ Error message:', error.message);
       Alert.alert('Error', 'Failed to reject invitation: ' + error.message);
     }
   };
 
   const onRefresh = () => {
+    console.log('🔄 Manual refresh triggered');
     setRefreshing(true);
     loadInvitations();
   };
@@ -97,12 +162,24 @@ const GroupInvitationsScreen = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={theme.colors.primary}
+          />
+        }
+      >
         {myInvitations.length === 0 ? (
           <View style={styles.emptyState}>
             <Icon name="inbox" size={48} color={theme.colors.textSecondary} />
             <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
               No pending invitations
+            </Text>
+            <Text style={[styles.emptySubtext, { color: theme.colors.textSecondary }]}>
+              When someone invites you to a budget group, it will appear here
             </Text>
           </View>
         ) : (
@@ -121,7 +198,10 @@ const GroupInvitationsScreen = ({ navigation }) => {
                   </Text>
                 )}
                 <Text style={[styles.invitedBy, { color: theme.colors.textSecondary }]}>
-                  Invited via: {invitation.invited_email}
+                  Invited to: {invitation.invited_email}
+                </Text>
+                <Text style={[styles.status, { color: theme.colors.textSecondary }]}>
+                  Status: {invitation.status}
                 </Text>
               </View>
               
@@ -183,6 +263,12 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
   },
+  emptySubtext: {
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
   invitationCard: {
     padding: 16,
     borderRadius: 12,
@@ -207,6 +293,11 @@ const styles = StyleSheet.create({
   },
   invitedBy: {
     fontSize: 12,
+    marginBottom: 4,
+  },
+  status: {
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   buttonContainer: {
     flexDirection: 'row',

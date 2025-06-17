@@ -1,4 +1,4 @@
-// src/controllers/BudgetGroupController.js - Updated version
+// src/controllers/BudgetGroupController.js - POPRAWIONY
 import { supabase } from '../utils/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
@@ -64,36 +64,180 @@ export class BudgetGroupController {
     }
   }
 
-  // Stwórz grupę
-  async createGroup(name, description) {
+  // POPRAWIONA - Stwórz grupę
+  async createGroup(name, description = '') {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
+      console.log('Creating group:', { name, description, created_by: user.id });
+
       // Ensure user profile exists
       await ProfileSync.ensureUserProfile();
 
-      const { data, error } = await supabase
+      // Stwórz grupę z wszystkimi wymaganymi polami
+      const { data: groupData, error: groupError } = await supabase
         .from('budget_groups')
         .insert({
-          name,
-          description,
-          created_by: user.id
+          name: name.trim(),
+          description: description.trim(),
+          created_by: user.id,
+          // Dodaj domyślne wartości dla month, year, amount jeśli są wymagane w schemacie
+          month: new Date().getMonth() + 1,
+          year: new Date().getFullYear(),
+          amount: 0
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (groupError) {
+        console.error('Error creating group:', groupError);
+        throw groupError;
+      }
+
+      console.log('Group created successfully:', groupData);
 
       // Dodaj twórcę jako admina
-      await this.addMemberToGroup(data.id, user.id, 'admin');
+      const membershipResult = await this.addMemberToGroup(groupData.id, user.id, 'admin');
+      console.log('Creator added as admin:', membershipResult);
       
       // Clear groups cache
       await this.clearCache('user_groups');
       
-      return data;
+      return groupData;
     } catch (error) {
       console.error('Error creating group:', error);
+      throw error;
+    }
+  }
+
+  // POPRAWIONA - Zaakceptuj zaproszenie
+  async acceptInvitation(invitationId) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      console.log('Accepting invitation:', invitationId, 'for user:', user.id);
+
+      // Ensure user profile exists
+      await ProfileSync.ensureUserProfile();
+
+      // Pobierz szczegóły zaproszenia
+      const { data: invitation, error: invitationError } = await supabase
+        .from('group_invitations')
+        .select('*')
+        .eq('id', invitationId)
+        .eq('invited_email', user.email)
+        .eq('status', 'pending')
+        .single();
+
+      if (invitationError || !invitation) {
+        console.error('Invitation not found:', invitationError);
+        throw new Error('Invitation not found or already processed');
+      }
+
+      console.log('Found invitation:', invitation);
+
+      // Sprawdź czy użytkownik już nie jest członkiem grupy
+      const { data: existingMember } = await supabase
+        .from('budget_group_members')
+        .select('id')
+        .eq('group_id', invitation.group_id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingMember) {
+        console.log('User already member of group');
+        // Oznacz zaproszenie jako zaakceptowane nawet jeśli już jest członkiem
+        await supabase
+          .from('group_invitations')
+          .update({ status: 'accepted' })
+          .eq('id', invitationId);
+        
+        return true;
+      }
+
+      // Dodaj użytkownika do grupy
+      console.log('Adding user to group:', invitation.group_id);
+      await this.addMemberToGroup(invitation.group_id, user.id, 'member');
+
+      // Oznacz zaproszenie jako zaakceptowane
+      const { error: updateError } = await supabase
+        .from('group_invitations')
+        .update({ status: 'accepted' })
+        .eq('id', invitationId);
+
+      if (updateError) {
+        console.error('Error updating invitation status:', updateError);
+        throw updateError;
+      }
+
+      console.log('Invitation accepted successfully');
+      
+      // Clear cache
+      await this.clearCache('user_groups');
+      
+      return true;
+    } catch (error) {
+      console.error('Error accepting invitation:', error);
+      throw error;
+    }
+  }
+
+  // POPRAWIONA - Dodaj członka do grupy
+  async addMemberToGroup(groupId, userId, role = 'member') {
+    try {
+      console.log('Adding member to group:', { groupId, userId, role });
+
+      // Sprawdź czy członkostwo już istnieje
+      const { data: existingMembership } = await supabase
+        .from('budget_group_members')
+        .select('id, role')
+        .eq('group_id', groupId)
+        .eq('user_id', userId)
+        .single();
+
+      if (existingMembership) {
+        console.log('User already member with role:', existingMembership.role);
+        // Jeśli już jest członkiem, zaktualizuj rolę jeśli się różni
+        if (existingMembership.role !== role) {
+          const { data: updatedData, error: updateError } = await supabase
+            .from('budget_group_members')
+            .update({ role })
+            .eq('id', existingMembership.id)
+            .select()
+            .single();
+
+          if (updateError) throw updateError;
+          return updatedData;
+        }
+        return existingMembership;
+      }
+
+      // Dodaj nowego członka
+      const { data, error } = await supabase
+        .from('budget_group_members')
+        .insert({
+          group_id: groupId,
+          user_id: userId,
+          role: role
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error adding member to group:', error);
+        throw error;
+      }
+      
+      console.log('Member added successfully:', data);
+      
+      // Clear members cache for this group
+      await this.clearCache(`members_${groupId}`);
+      
+      return data;
+    } catch (error) {
+      console.error('Error adding member to group:', error);
       throw error;
     }
   }
@@ -175,54 +319,6 @@ export class BudgetGroupController {
     }
   }
 
-  // Zaakceptuj zaproszenie
-  async acceptInvitation(invitationId) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      // Pobierz szczegóły zaproszenia
-      const { data: invitation, error: invitationError } = await supabase
-        .from('group_invitations')
-        .select('*')
-        .eq('id', invitationId)
-        .eq('invited_email', user.email)
-        .eq('status', 'pending')
-        .single();
-
-      if (invitationError || !invitation) {
-        throw new Error('Invitation not found or already processed');
-      }
-
-      // Sprawdź czy użytkownik już nie jest członkiem grupy
-      const { data: existingMember } = await supabase
-        .from('budget_group_members')
-        .select('id')
-        .eq('group_id', invitation.group_id)
-        .eq('user_id', user.id)
-        .single();
-
-      if (existingMember) {
-        throw new Error('You are already a member of this group');
-      }
-
-      // Dodaj użytkownika do grupy
-      await this.addMemberToGroup(invitation.group_id, user.id, 'member');
-
-      // Oznacz zaproszenie jako zaakceptowane
-      const { error: updateError } = await supabase
-        .from('group_invitations')
-        .update({ status: 'accepted' })
-        .eq('id', invitationId);
-
-      if (updateError) throw updateError;
-      return true;
-    } catch (error) {
-      console.error('Error accepting invitation:', error);
-      throw error;
-    }
-  }
-
   // Odrzuć zaproszenie
   async rejectInvitation(invitationId) {
     try {
@@ -243,28 +339,58 @@ export class BudgetGroupController {
     }
   }
 
-  // Dodaj członka do grupy
-  async addMemberToGroup(groupId, userId, role = 'member') {
+  // Pobierz grupy użytkownika
+  async getUserGroups(forceRefresh = false) {
     try {
+      const cacheKey = 'user_groups';
+      const online = await this.isOnline();
+
+      console.log(`Getting user groups, online: ${online}, forceRefresh: ${forceRefresh}`);
+
+      // Try cache first if not forcing refresh
+      if (!forceRefresh) {
+        const cached = await this.getCache(cacheKey);
+        if (cached) {
+          console.log('Returning cached user groups');
+          return cached;
+        }
+      }
+
+      // If offline and no cache, throw error
+      if (!online) {
+        throw new Error('No internet connection and no cached data available');
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       const { data, error } = await supabase
         .from('budget_group_members')
-        .insert({
-          group_id: groupId,
-          user_id: userId,
-          role
-        })
-        .select()
-        .single();
+        .select(`
+          *,
+          budget_groups!inner(*)
+        `)
+        .eq('user_id', user.id);
 
-      if (error) throw error;
-      
-      // Clear members cache for this group
-      await this.clearCache(`members_${groupId}`);
-      
-      return data;
+      if (error) {
+        console.error('Error getting user groups:', error);
+        return [];
+      }
+
+      const groups = data?.map(membership => ({
+        ...membership.budget_groups,
+        user_role: membership.role,
+        joined_at: membership.joined_at
+      })) || [];
+
+      // Cache the result
+      await this.setCache(cacheKey, groups);
+
+      console.log(`Found ${groups.length} groups for user`);
+      return groups;
     } catch (error) {
-      console.error('Error adding member to group:', error);
-      throw error;
+      console.error('Error getting user groups:', error);
+      return [];
     }
   }
 
@@ -305,158 +431,46 @@ export class BudgetGroupController {
         throw new Error('Only group admins can view member list');
       }
 
-      console.log('Fetching group members from database...');
-
-      // ROZWIĄZANIE 1: Najpierw pobierz członków grupy, potem profile
-      const { data: members, error: membersError } = await supabase
+      const { data, error } = await supabase
         .from('budget_group_members')
-        .select('*')
-        .eq('group_id', groupId)
-        .order('joined_at', { ascending: true });
+        .select(`
+          *,
+          profiles!inner(*)
+        `)
+        .eq('group_id', groupId);
 
-      if (membersError) {
-        console.error('Error fetching group members:', membersError);
-        throw membersError;
-      }
-
-      console.log(`Fetched ${members?.length || 0} members from database`);
-
-      if (!members || members.length === 0) {
+      if (error) {
+        console.error('Error getting group members:', error);
         return [];
       }
 
-      // Pobierz profile dla wszystkich członków
-      const userIds = members.map(member => member.user_id);
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('id', userIds);
-
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        // Kontynuuj bez profili - użyj fallback
-      }
-
-      console.log(`Fetched ${profiles?.length || 0} profiles`);
-
-      // Połącz dane członków z profilami
-      const membersWithEmails = await Promise.all(
-        members.map(async (member) => {
-          // Znajdź profil dla tego członka
-          const profile = profiles?.find(p => p.id === member.user_id);
-          
-          let email = profile?.email;
-          let fullName = profile?.full_name;
-          let avatarUrl = profile?.avatar_url;
-
-          // Jeśli nie ma profilu, spróbuj go utworzyć lub użyj fallback
-          if (!profile) {
-            console.log(`No profile found for user ${member.user_id}, attempting to create/fallback`);
-            
-            try {
-              // Dla aktualnego użytkownika - użyj danych z auth
-              if (member.user_id === user.id) {
-                await ProfileSync.ensureUserProfile();
-                const userProfile = await ProfileSync.getProfile();
-                if (userProfile) {
-                  email = userProfile.email;
-                  fullName = userProfile.full_name;
-                  avatarUrl = userProfile.avatar_url;
-                }
-              } else {
-                // Dla innych użytkowników - stwórz podstawowy profil
-                const basicProfile = {
-                  id: member.user_id,
-                  email: `user-${member.user_id.substring(0, 8)}@unknown.com`,
-                  full_name: `User ${member.user_id.substring(0, 8)}`
-                };
-
-                const { data: createdProfile, error: insertError } = await supabase
-                  .from('profiles')
-                  .insert(basicProfile)
-                  .select()
-                  .single();
-
-                if (!insertError) {
-                  email = createdProfile.email;
-                  fullName = createdProfile.full_name;
-                } else if (insertError.code === '23505') {
-                  // Profil już istnieje, spróbuj go pobrać
-                  const { data: existingProfile } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', member.user_id)
-                    .single();
-                  
-                  if (existingProfile) {
-                    email = existingProfile.email;
-                    fullName = existingProfile.full_name;
-                    avatarUrl = existingProfile.avatar_url;
-                  }
-                }
-              }
-            } catch (profileError) {
-              console.error('Error creating/fetching profile:', profileError);
-            }
-
-            // Ultimate fallback
-            if (!email) {
-              email = `User ${member.user_id.substring(0, 8)}`;
-              fullName = `User ${member.user_id.substring(0, 8)}`;
-            }
-          }
-
-          return {
-            ...member,
-            email: email || 'Unknown Email',
-            user_email: email || 'Unknown Email',
-            full_name: fullName || email?.split('@')[0] || 'Unknown User',
-            avatar_url: avatarUrl,
-            display_name: fullName || email?.split('@')[0] || `User ${member.user_id.substring(0, 8)}`,
-            // Dodaj profile object dla kompatybilności z poprzednim kodem
-            profiles: profile ? {
-              email: email,
-              full_name: fullName,
-              avatar_url: avatarUrl
-            } : null
-          };
-        })
-      );
-
-      console.log('Processed members with email data:', membersWithEmails);
+      const members = data?.map(member => ({
+        id: member.id,
+        user_id: member.user_id,
+        role: member.role,
+        joined_at: member.joined_at,
+        email: member.profiles?.email,
+        full_name: member.profiles?.full_name,
+        avatar_url: member.profiles?.avatar_url
+      })) || [];
 
       // Cache the result
-      await this.setCache(cacheKey, membersWithEmails, this.defaultCacheTTL);
+      await this.setCache(cacheKey, members);
 
-      return membersWithEmails;
-
+      return members;
     } catch (error) {
       console.error('Error getting group members:', error);
-      
-      // Try to return stale cache as last resort
-      const cacheKey = `members_${groupId}`;
-      const staleCache = await this.getCache(cacheKey);
-      if (staleCache) {
-        console.log('Returning stale cache due to error');
-        return staleCache;
-      }
-      
       throw error;
     }
   }
 
-  // Usuń członka z grupy (tylko dla adminów)
-  async removeMemberFromGroup(groupId, userId) {
+  // Usuń członka z grupy
+  async removeMemberFromGroup(groupId, memberId) {
     try {
-      const online = await this.isOnline();
-      if (!online) {
-        throw new Error('This action requires internet connection');
-      }
-
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Check if user is admin
+      // Check if current user is admin
       const { data: membership } = await supabase
         .from('budget_group_members')
         .select('role')
@@ -468,153 +482,45 @@ export class BudgetGroupController {
         throw new Error('Only group admins can remove members');
       }
 
-      // Check if trying to remove admin
-      const { data: targetMember } = await supabase
-        .from('budget_group_members')
-        .select('role')
-        .eq('group_id', groupId)
-        .eq('user_id', userId)
-        .single();
-
-      if (targetMember?.role === 'admin') {
-        throw new Error('Cannot remove group admin');
-      }
-
-      // Remove member
       const { error } = await supabase
         .from('budget_group_members')
         .delete()
-        .eq('group_id', groupId)
-        .eq('user_id', userId);
+        .eq('id', memberId)
+        .eq('group_id', groupId);
 
       if (error) throw error;
 
-      // Clear cache to force refresh
+      // Clear cache
       await this.clearCache(`members_${groupId}`);
 
-      console.log(`Member ${userId} removed from group ${groupId}`);
       return true;
-
     } catch (error) {
       console.error('Error removing member from group:', error);
       throw error;
     }
   }
 
-  // Pobierz grupy użytkownika
-  async getUserGroups() {
+  // Pobierz rolę użytkownika w grupie
+  async getUserRole(groupId) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
       const { data, error } = await supabase
         .from('budget_group_members')
-        .select(`
-          *,
-          budget_groups!inner(*)
-        `)
-        .eq('user_id', user.id);
-
-      if (error) {
-        console.error('Error getting user groups:', error);
-        return [];
-      }
-      
-      return data?.map(item => ({
-        ...item.budget_groups,
-        user_role: item.role
-      })) || [];
-    } catch (error) {
-      console.error('Error getting user groups:', error);
-      return [];
-    }
-  }
-
-  // Dodaj transakcję grupową
-  async addGroupTransaction(groupId, transactionData) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      const { data, error } = await supabase
-        .from('transactions')
-        .insert({
-          ...transactionData,
-          group_id: groupId,
-          user_id: user.id
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error adding group transaction:', error);
-      throw error;
-    }
-  }
-
-  // Pobierz transakcje grupy
-  async getGroupTransactions(groupId) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      // Sprawdź czy użytkownik należy do grupy
-      const { data: membership, error: membershipError } = await supabase
-        .from('budget_group_members')
-        .select('*')
+        .select('role')
         .eq('group_id', groupId)
         .eq('user_id', user.id)
         .single();
 
-      if (membershipError || !membership) {
-        console.error('No access to group:', groupId);
-        return [];
+      if (error || !data) {
+        return null;
       }
 
-      // Pobierz WSZYSTKIE transakcje grupy (od wszystkich członków)
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('group_id', groupId)  // ✅ NIE filtruj po user_id!
-        .order('date', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching group transactions:', error);
-        return [];
-      }
-
-      console.log(`Fetched ${data?.length || 0} transactions for group ${groupId} from all members`);
-      return data || [];
+      return data.role;
     } catch (error) {
-      console.error('Error getting group transactions:', error);
-      return [];
-    }
-  }
-
-  // Ustaw budżet grupy
-  async setGroupBudget(groupId, budgetData) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      const { data, error } = await supabase
-        .from('budgets')
-        .insert({
-          ...budgetData,
-          group_id: groupId,
-          is_group_budget: true,
-          user_id: user.id
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error setting group budget:', error);
-      throw error;
+      console.error('Error getting user role:', error);
+      return null;
     }
   }
 
@@ -635,161 +541,6 @@ export class BudgetGroupController {
     } catch (error) {
       console.error('Error getting last selected group:', error);
       return null;
-    }
-  }
-
-  // Get group spending summary
-  async getGroupSpendingSummary(groupId, month, year) {
-    try {
-      console.log(`Generating group spending summary for group ${groupId}, ${month}/${year}`);
-      
-      const startDate = new Date(year, month, 1);
-      const endDate = new Date(year, month + 1, 0);
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      // Sprawdź członkostwo
-      const { data: membership, error: membershipError } = await supabase
-        .from('budget_group_members')
-        .select('*')
-        .eq('group_id', groupId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (membershipError || !membership) {
-        console.error('No access to group:', groupId);
-        return {
-          totalIncome: 0,
-          totalExpenses: 0,
-          balance: 0,
-          spendingByCategory: [],
-          monthlyBudget: 0,
-          totalBudget: 0,
-          budgetPercentage: 0
-        };
-      }
-
-      // Pobierz WSZYSTKIE transakcje grupy z filtrem daty (od wszystkich członków)
-      const { data: transactions, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('group_id', groupId)  // ✅ NIE filtruj po user_id!
-        .gte('date', startDate.toISOString())
-        .lte('date', endDate.toISOString());
-
-      if (error) {
-        console.error('Error fetching group transactions:', error);
-        throw error;
-      }
-
-      console.log(`Found ${transactions?.length || 0} group transactions from all members for summary`);
-
-      // Pobierz budżet grupy
-      const { data: groupBudget } = await supabase
-        .from('budgets')
-        .select('*')
-        .eq('group_id', groupId)
-        .eq('month', month)
-        .eq('year', year)
-        .eq('is_group_budget', true)
-        .single();
-
-      const budgetAmount = groupBudget?.amount || 0;
-      
-      // Pobierz kategorie
-      const { data: categories } = await supabase
-        .from('categories')
-        .select('*');
-
-      // Oblicz dochody i wydatki
-      const totalIncome = transactions
-        .filter(t => t.is_income === true)
-        .reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-        
-      const totalExpenses = transactions
-        .filter(t => t.is_income === false && !t.is_parent)
-        .reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-
-      // Oblicz wydatki per kategoria
-      const spendingByCategory = categories.map(category => {
-        const categoryTransactions = transactions.filter(
-          t => t.category === category.id && t.is_income === false && !t.is_parent
-        );
-        
-        const spent = categoryTransactions.reduce((sum, t) => {
-          const amount = typeof t.amount === 'string' ? parseFloat(t.amount) : t.amount;
-          return sum + amount;
-        }, 0);
-        
-        const remaining = category.budget - spent;
-        const percentage = category.budget > 0 ? (spent / category.budget) * 100 : 0;
-        
-        return {
-          category,
-          spent,
-          remaining: remaining > 0 ? remaining : 0,
-          percentage: percentage > 100 ? 100 : percentage,
-        };
-      });
-
-      const totalBudget = budgetAmount + totalIncome;
-
-      const summary = {
-        totalIncome,
-        totalExpenses,
-        balance: totalIncome - totalExpenses,
-        monthlyBudget: budgetAmount,
-        totalBudget: totalBudget,
-        spendingByCategory,
-        budgetPercentage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0
-      };
-
-      console.log('Generated group spending summary from all members:', summary);
-      return summary;
-    } catch (error) {
-      console.error('Error generating group spending summary:', error);
-      throw error;
-    }
-  }
-
-  // Initialize profiles for existing users (call once)
-  async initializeExistingUserProfiles() {
-    try {
-      console.log('Initializing profiles for existing users...');
-      await ProfileSync.createProfilesForExistingUsers();
-      console.log('Profile initialization complete');
-    } catch (error) {
-      console.error('Error initializing user profiles:', error);
-    }
-  }
-  async getUserRole(groupId) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
-
-      const { data: membership, error } = await supabase
-        .from('budget_group_members')
-        .select('role')
-        .eq('group_id', groupId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (error) {
-        console.error('Error getting user role:', error);
-        return 'member';
-      }
-
-      return membership.role || 'member';
-    } catch (error) {
-      console.error('Error getting user role:', error);
-      return 'member';
     }
   }
 }

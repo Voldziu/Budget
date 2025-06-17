@@ -1,123 +1,71 @@
+// src/utils/ProfileSync.js - POPRAWIONY
 import { supabase } from './supabase';
-import { useState, useEffect } from 'react';
 
 export class ProfileSync {
   
-  // Wywołaj to po każdym logowaniu użytkownika
+  // Ensure user profile exists in profiles table
   static async ensureUserProfile() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.log('No user found');
+        console.log('No authenticated user found');
         return null;
       }
 
-      console.log('Ensuring profile for user:', user.id);
+      console.log('Checking profile for user:', user.id);
 
-      // Metoda 1: Sprawdź czy profil już istnieje
-      const { data: existingProfile, error: selectError } = await supabase
+      // Check if profile already exists
+      const { data: existingProfile, error: checkError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
 
-      if (selectError && selectError.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('Error checking existing profile:', selectError);
-      }
-
       if (existingProfile) {
-        console.log('Profile already exists, updating if needed');
-        
-        // Zaktualizuj profil jeśli email lub nazwa się zmieniły
-        const updatedFullName = user.user_metadata?.full_name || 
-                               user.user_metadata?.name || 
-                               user.email.split('@')[0];
-
-        if (existingProfile.email !== user.email || 
-            existingProfile.full_name !== updatedFullName) {
-          
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({
-              email: user.email,
-              full_name: updatedFullName,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', user.id);
-
-          if (updateError) {
-            console.error('Error updating profile:', updateError);
-          } else {
-            console.log('Profile updated successfully');
-          }
-        }
-
+        console.log('Profile already exists');
         return existingProfile;
       }
 
-      // Metoda 2: Stwórz nowy profil
-      console.log('Creating new profile');
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 means no rows returned, which is expected for new users
+        console.error('Error checking existing profile:', checkError);
+        throw checkError;
+      }
+
+      // Create new profile
+      console.log('Creating new profile for user:', user.id);
       
-      const newProfile = {
+      const profileData = {
         id: user.id,
         email: user.email,
-        full_name: user.user_metadata?.full_name || 
-                  user.user_metadata?.name || 
-                  user.email.split('@')[0]
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'User',
+        avatar_url: user.user_metadata?.avatar_url || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
-      const { data: createdProfile, error: insertError } = await supabase
+      const { data: newProfile, error: insertError } = await supabase
         .from('profiles')
-        .insert(newProfile)
+        .insert(profileData)
         .select()
         .single();
 
       if (insertError) {
         console.error('Error creating profile:', insertError);
-        
-        // Jeśli błąd to duplicate key, ignoruj
-        if (insertError.code === '23505') {
-          console.log('Profile already exists (race condition), fetching existing');
-          return await this.getProfile();
-        }
-        
         throw insertError;
       }
 
-      console.log('Profile created successfully:', createdProfile);
-      return createdProfile;
-
+      console.log('Profile created successfully:', newProfile);
+      return newProfile;
+      
     } catch (error) {
       console.error('Error ensuring user profile:', error);
+      // Don't throw error - return null to allow app to continue
       return null;
     }
   }
 
-  // Pobierz profil aktualnego użytkownika
-  static async getProfile() {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (error) {
-        console.error('Error getting profile:', error);
-        return null;
-      }
-
-      return profile;
-    } catch (error) {
-      console.error('Error getting profile:', error);
-      return null;
-    }
-  }
-
-  // Zaktualizuj profil użytkownika
+  // Update user profile
   static async updateProfile(updates) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -134,8 +82,6 @@ export class ProfileSync {
         .single();
 
       if (error) throw error;
-      
-      console.log('Profile updated:', data);
       return data;
     } catch (error) {
       console.error('Error updating profile:', error);
@@ -143,108 +89,46 @@ export class ProfileSync {
     }
   }
 
-  // Pobierz profil użytkownika po ID (dla członków grup)
-  static async getProfileById(userId) {
+  // Get user profile
+  static async getUserProfile(userId = null) {
     try {
-      const { data: profile, error } = await supabase
+      let targetUserId = userId;
+      
+      if (!targetUserId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('User not authenticated');
+        targetUserId = user.id;
+      }
+
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', userId)
+        .eq('id', targetUserId)
         .single();
 
       if (error) {
-        console.error('Error getting profile by ID:', error);
-        return null;
+        if (error.code === 'PGRST116') {
+          // Profile doesn't exist, try to create it if it's current user
+          if (!userId) {
+            return await this.ensureUserProfile();
+          }
+        }
+        throw error;
       }
 
-      return profile;
+      return data;
     } catch (error) {
-      console.error('Error getting profile by ID:', error);
-      return null;
+      console.error('Error getting user profile:', error);
+      throw error;
     }
   }
 
-  // Masowo stwórz profile dla istniejących użytkowników (wywołaj raz)
-  static async createProfilesForExistingUsers() {
+  // Initialize profile sync on app start
+  static async initializeProfileSync() {
     try {
-      console.log('Creating profiles for existing users...');
-      
-      // Pobierz wszystkich członków grup, którzy nie mają profili
-      const { data: membersWithoutProfiles, error } = await supabase
-        .from('budget_group_members')
-        .select(`
-          user_id,
-          profiles:user_id (id)
-        `)
-        .is('profiles.id', null);
-
-      if (error) {
-        console.error('Error getting members without profiles:', error);
-        return;
-      }
-
-      console.log(`Found ${membersWithoutProfiles?.length || 0} users without profiles`);
-
-      // Dla każdego użytkownika bez profilu, stwórz podstawowy profil
-      if (membersWithoutProfiles?.length > 0) {
-        const profilesToCreate = membersWithoutProfiles.map(member => ({
-          id: member.user_id,
-          email: `user-${member.user_id.substring(0, 8)}@unknown.com`, // Placeholder
-          full_name: `User ${member.user_id.substring(0, 8)}`
-        }));
-
-        const { error: batchError } = await supabase
-          .from('profiles')
-          .insert(profilesToCreate);
-
-        if (batchError) {
-          console.error('Error creating batch profiles:', batchError);
-        } else {
-          console.log(`Created ${profilesToCreate.length} profiles`);
-        }
-      }
-
+      await this.ensureUserProfile();
     } catch (error) {
-      console.error('Error creating profiles for existing users:', error);
+      console.error('Error initializing profile sync:', error);
     }
   }
 }
-
-// Hook do synchronizacji profilu
-export const useProfileSync = () => {
-  const [profileReady, setProfileReady] = useState(false);
-
-  useEffect(() => {
-    const initProfile = async () => {
-      try {
-        await ProfileSync.ensureUserProfile();
-        setProfileReady(true);
-      } catch (error) {
-        console.error('Error initializing profile:', error);
-        setProfileReady(true); // Continue anyway
-      }
-    };
-
-    // Sprawdź czy użytkownik jest zalogowany
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        initProfile();
-      } else {
-        setProfileReady(true);
-      }
-    });
-
-    // Nasłuchuj zmian stanu auth
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          await initProfile();
-        }
-      }
-    );
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  return profileReady;
-}; 

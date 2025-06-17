@@ -14,6 +14,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
+import { supabase, TABLES } from '../utils/supabase';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Feather';
 import {useCurrency} from '../utils/CurrencyContext';
@@ -183,34 +184,45 @@ const BudgetScreen = ({navigation}) => {
     setSelectedGroup(group);
   };
 
-  const handleSaveBudget = async () => {
+  async function setGroupBudget(groupId, budgetData){
     try {
-      const amount = parseFloat(budgetInputValue.replace(',', '.'));
-      if (isNaN(amount) || amount < 0) {
-        Alert.alert('Invalid Amount', 'Please enter a valid budget amount');
-        return;
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      
+      // ✅ LEPSZE SPRAWDZENIE AUTHENTICATION
+      if (authError) {
+        console.error('Auth error in BudgetGroupController.setGroupBudget:', authError);
+        throw new Error('Authentication failed: ' + authError.message);
       }
-
-      const updatedBudget = {...budget, amount};
-
-      if (selectedGroup?.isPersonal) {
-        // Save personal budget
-        await budgetController.setBudget(updatedBudget);
-      } else {
-        // Save group budget (only if admin/owner)
-        if (userRole !== 'admin' && userRole !== 'owner') {
-          Alert.alert('Permission Denied', 'Only admins can modify group budget');
-          return;
-        }
-        await budgetController.setGroupBudget(selectedGroup.id, updatedBudget);
+      
+      if (!user || !user.id) {
+        console.error('No valid user found in BudgetGroupController.setGroupBudget:', user);
+        throw new Error('User not authenticated or missing user ID');
       }
-
-      setBudget(updatedBudget);
-      setEditingBudget(false);
-      await loadDataForGroup(selectedGroup);
+  
+      const budgetToInsert = {
+        ...budgetData,
+        group_id: groupId,
+        is_group_budget: true,
+        user_id: user.id  // ✅ ZWERYFIKOWANY user.id
+      };
+  
+      // ✅ DODATKOWE SPRAWDZENIE PRZED INSERT
+      console.log('Budget to insert in BudgetGroupController:', budgetToInsert);
+      if (!budgetToInsert.user_id) {
+        throw new Error('Cannot create group budget: user_id is null');
+      }
+  
+      const { data, error } = await supabase
+        .from('budgets')
+        .insert(budgetToInsert)
+        .select()
+        .single();
+  
+      if (error) throw error;
+      return data;
     } catch (error) {
-      console.error('Error saving budget:', error);
-      Alert.alert('Error', 'Failed to save budget. Please try again.');
+      console.error('Error setting group budget in BudgetGroupController:', error);
+      throw error;
     }
   };
 
@@ -241,6 +253,36 @@ const BudgetScreen = ({navigation}) => {
     } catch (error) {
       console.error('Error saving category budget:', error);
       Alert.alert('Error', 'Failed to save category budget. Please try again.');
+    }
+  };
+  const handleSaveBudget = async () => {
+    try {
+      const amount = parseFloat(budgetInputValue.replace(',', '.'));
+      if (isNaN(amount) || amount < 0) {
+        Alert.alert('Invalid Amount', 'Please enter a valid budget amount');
+        return;
+      }
+  
+      const updatedBudget = {...budget, amount};
+  
+      if (selectedGroup?.isPersonal) {
+        // Save personal budget
+        await budgetController.setBudget(updatedBudget);
+      } else {
+        // Save group budget (only if admin/owner)
+        if (userRole !== 'admin' && userRole !== 'owner') {
+          Alert.alert('Permission Denied', 'Only admins can modify group budget');
+          return;
+        }
+        await budgetController.setGroupBudget(selectedGroup.id, updatedBudget);
+      }
+  
+      setBudget(updatedBudget);
+      setEditingBudget(false);
+      await loadDataForGroup(selectedGroup);
+    } catch (error) {
+      console.error('Error saving budget:', error);
+      Alert.alert('Error', 'Failed to save budget. Please try again.');
     }
   };
 
