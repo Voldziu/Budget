@@ -104,17 +104,28 @@ const TransactionsScreen = ({navigation}) => {
 
     setLoading(true);
     try {
-      const groupIdForQuery = (group.isPersonal || group.id === 'personal') ? null : group.id;
-
+      const groupIdForQuery = (group.isPersonal || group.id === 'personal') ? 'personal' : group.id;
+      
       console.log('Using groupId for transactions query:', groupIdForQuery);
 
-      const allTransactions = await transactionController.getAllTransactions(groupIdForQuery);
+      const allTransactions = await transactionController.getGroupTransactions(groupIdForQuery);
       const allCategories = await categoryController.getAllCategories();
 
       console.log('Transactions loaded:', {
         groupId: groupIdForQuery,
         transactionCount: allTransactions?.length || 0,
+        sampleTransaction: allTransactions?.[0] || 'none'
       });
+
+      if (allTransactions?.length > 0) {
+        console.log('Sample transactions by group_id:');
+        const groupCounts = {};
+        allTransactions.forEach(t => {
+          const gid = t.group_id || 'null';
+          groupCounts[gid] = (groupCounts[gid] || 0) + 1;
+        });
+        console.log('Group distribution:', groupCounts);
+      }
 
       setTransactions(
         allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date)),
