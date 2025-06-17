@@ -16,6 +16,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SupabaseBudgetController} from '../controllers/SupabaseBudgetController';
 import {SupabaseTransactionController} from '../controllers/SupabaseTransactionController';
 import {SupabaseCategoryController} from '../controllers/SupabaseCategoryController';
+import {OfflineBudgetController} from '../controllers/OfflineBudgetController';
+import {OfflineTransactionController} from '../controllers/OfflineTransactionController';
+import {OfflineCategoryController} from '../controllers/OfflineCategoryController';
+
 import {useCurrency} from '../utils/CurrencyContext';
 import {useTheme} from '../utils/ThemeContext';
 import TransactionItem from './components/TransactionItem';
@@ -43,10 +47,10 @@ const HomeScreen = ({navigation}) => {
   const [childTransactions, setChildTransactions] = useState({});
   const [loadingChildren, setLoadingChildren] = useState({});
 
-  // BEZPOŚREDNIE KONTROLERY - BEZ CACHE!
-  const [budgetController] = useState(() => new SupabaseBudgetController());
-  const [transactionController] = useState(() => new SupabaseTransactionController());
-  const [categoryController] = useState(() => new SupabaseCategoryController());
+
+  const [budgetController] = useState(() => new OfflineBudgetController());
+  const [transactionController] = useState(() => new OfflineTransactionController());
+  const [categoryController] = useState(() => new OfflineCategoryController());
 
   const [syncStatus, setSyncStatus] = useState(null); // 'syncing', 'success', 'error'
   const { isOnline, isConnecting } = useNetworkStatus();

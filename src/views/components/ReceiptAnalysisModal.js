@@ -15,6 +15,9 @@ import {
 import Icon from 'react-native-vector-icons/Feather';
 import { SupabaseTransactionController } from '../../controllers/SupabaseTransactionController';
 
+import {OfflineTransactionController} from '../../controllers/OfflineTransactionController';
+
+
 const ReceiptAnalysisModal = ({ 
   visible, 
   onClose, 
@@ -32,7 +35,7 @@ const ReceiptAnalysisModal = ({
   const [isLoading, setIsLoading] = useState(false);
   
   // Initialize transaction controller
-  const transactionController = new SupabaseTransactionController();
+  const transactionController = new OfflineTransactionController();
   
   // Initialize products data when the receipt data changes
   useEffect(() => {
