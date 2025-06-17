@@ -769,4 +769,27 @@ export class BudgetGroupController {
       console.error('Error initializing user profiles:', error);
     }
   }
+  async getUserRole(groupId) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const { data: membership, error } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error getting user role:', error);
+        return 'member';
+      }
+
+      return membership.role || 'member';
+    } catch (error) {
+      console.error('Error getting user role:', error);
+      return 'member';
+    }
+  }
 }
