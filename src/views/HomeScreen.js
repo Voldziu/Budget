@@ -313,7 +313,6 @@ const HomeScreen = ({navigation}) => {
       setSyncStatus('success');
       setTimeout(() => setSyncStatus(null), 3000);
     } catch (error) {
-      console.error('Sync failed:', error);
       setSyncStatus('error');
       setTimeout(() => setSyncStatus(null), 5000);
     }
@@ -545,12 +544,6 @@ const HomeScreen = ({navigation}) => {
                 />
               </View>
 
-              {/* Debug Cache Clear Button */}
-              <TouchableOpacity 
-                style={[styles.debugButton, { backgroundColor: theme.colors.error }]}
-                onPress={clearCache}>
-                <Text style={styles.debugButtonText}>Clear Cache (Debug)</Text>
-              </TouchableOpacity>
             </View>
 
             <TouchableOpacity
@@ -912,14 +905,6 @@ const HomeScreen = ({navigation}) => {
           <View style={styles.bottomPadding} />
         </ScrollView>
       </SafeAreaView>
-
-      {/* Debug button */}
-      <TouchableOpacity 
-        onPress={debugCache}
-        style={styles.debugButton}
-      >
-        <Text style={styles.debugButtonText}>Debug Cache</Text>
-      </TouchableOpacity>
     </View>
   );
 };

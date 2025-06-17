@@ -1,3 +1,4 @@
+// src/controllers/BudgetGroupController.js - Enhanced with member management
 import { supabase } from '../utils/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -36,6 +37,31 @@ export class BudgetGroupController {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
+      // Sprawdź czy użytkownik jest adminem grupy
+      const { data: membership } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        throw new Error('Only group admins can send invitations');
+      }
+
+      // Sprawdź czy zaproszenie już nie istnieje
+      const { data: existingInvitation } = await supabase
+        .from('group_invitations')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('invited_email', email)
+        .eq('status', 'pending')
+        .single();
+
+      if (existingInvitation) {
+        throw new Error('Invitation already sent to this email');
+      }
+
       const { data, error } = await supabase
         .from('group_invitations')
         .insert({
@@ -59,46 +85,61 @@ export class BudgetGroupController {
   async getMyInvitations() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
+      if (!user || !user.email) throw new Error('User not authenticated');
 
       const { data, error } = await supabase
         .from('group_invitations')
         .select(`
           *,
-          budget_groups!inner(name, description)
+          budget_groups!inner(*)
         `)
         .eq('invited_email', user.email)
         .eq('status', 'pending');
 
       if (error) {
-        console.error('Supabase error:', error);
+        console.error('Error getting invitations:', error);
         return [];
       }
       
       return data || [];
     } catch (error) {
-      console.error('Error getting invitations:', error);
+      console.error('Error getting user invitations:', error);
       return [];
     }
   }
 
-  // Akceptuj zaproszenie
+  // Zaakceptuj zaproszenie
   async acceptInvitation(invitationId) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Pobierz zaproszenie
-      const { data: invitation, error: invError } = await supabase
+      // Pobierz szczegóły zaproszenia
+      const { data: invitation, error: invitationError } = await supabase
         .from('group_invitations')
         .select('*')
         .eq('id', invitationId)
         .eq('invited_email', user.email)
+        .eq('status', 'pending')
         .single();
 
-      if (invError) throw invError;
+      if (invitationError || !invitation) {
+        throw new Error('Invitation not found or already processed');
+      }
 
-      // Dodaj do grupy
+      // Sprawdź czy użytkownik już nie jest członkiem grupy
+      const { data: existingMember } = await supabase
+        .from('budget_group_members')
+        .select('id')
+        .eq('group_id', invitation.group_id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingMember) {
+        throw new Error('You are already a member of this group');
+      }
+
+      // Dodaj użytkownika do grupy
       await this.addMemberToGroup(invitation.group_id, user.id, 'member');
 
       // Oznacz zaproszenie jako zaakceptowane
@@ -118,10 +159,14 @@ export class BudgetGroupController {
   // Odrzuć zaproszenie
   async rejectInvitation(invitationId) {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       const { error } = await supabase
         .from('group_invitations')
         .update({ status: 'rejected' })
-        .eq('id', invitationId);
+        .eq('id', invitationId)
+        .eq('invited_email', user.email);
 
       if (error) throw error;
       return true;
@@ -148,6 +193,129 @@ export class BudgetGroupController {
       return data;
     } catch (error) {
       console.error('Error adding member to group:', error);
+      throw error;
+    }
+  }
+
+  // Pobierz członków grupy (tylko dla adminów)
+  async getGroupMembers(groupId) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź czy użytkownik jest adminem grupy
+      const { data: membership } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        throw new Error('Only group admins can view member list');
+      }
+
+      // Pobierz wszystkich członków grupy wraz z danymi użytkowników
+      const { data, error } = await supabase
+        .from('budget_group_members')
+        .select(`
+          *,
+          profiles:user_id (
+            email,
+            full_name
+          )
+        `)
+        .eq('group_id', groupId)
+        .order('joined_at', { ascending: true });
+
+      if (error) {
+        console.error('Error getting group members:', error);
+        // Fallback - pobierz bez profili jeśli tabela profiles nie istnieje
+        const { data: membersOnly, error: fallbackError } = await supabase
+          .from('budget_group_members')
+          .select('*')
+          .eq('group_id', groupId)
+          .order('joined_at', { ascending: true });
+
+        if (fallbackError) throw fallbackError;
+
+        // Dodaj podstawowe informacje użytkowników z auth.users
+        const membersWithEmails = await Promise.all(
+          membersOnly.map(async (member) => {
+            try {
+              // To będzie działać tylko jeśli mamy dostęp do auth.users
+              // W przeciwnym razie zwrócimy member bez email
+              return {
+                ...member,
+                email: 'User', // Placeholder
+                user_email: 'User'
+              };
+            } catch {
+              return {
+                ...member,
+                email: 'User',
+                user_email: 'User'
+              };
+            }
+          })
+        );
+
+        return membersWithEmails;
+      }
+      
+      return data?.map(member => ({
+        ...member,
+        email: member.profiles?.email || 'Unknown',
+        user_email: member.profiles?.email || 'Unknown',
+        full_name: member.profiles?.full_name
+      })) || [];
+    } catch (error) {
+      console.error('Error getting group members:', error);
+      throw error;
+    }
+  }
+
+  // Usuń członka z grupy (tylko dla adminów)
+  async removeMemberFromGroup(groupId, userId) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź czy użytkownik jest adminem grupy
+      const { data: membership } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        throw new Error('Only group admins can remove members');
+      }
+
+      // Sprawdź czy próbujemy usunąć admina
+      const { data: targetMember } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', userId)
+        .single();
+
+      if (targetMember?.role === 'admin') {
+        throw new Error('Cannot remove group admin');
+      }
+
+      // Usuń członka z grupy
+      const { error } = await supabase
+        .from('budget_group_members')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error removing member from group:', error);
       throw error;
     }
   }
