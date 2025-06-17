@@ -1,13 +1,77 @@
+// src/controllers/BudgetGroupController.js - Updated version
 import { supabase } from '../utils/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+import { ProfileSync } from '../utils/ProfileSync';
 
 export class BudgetGroupController {
   
+  constructor() {
+    this.cachePrefix = 'budget_group_';
+    this.defaultCacheTTL = 5 * 60 * 1000; // 5 minutes
+  }
+
+  // Network connectivity check
+  async isOnline() {
+    try {
+      const networkState = await NetInfo.fetch();
+      return networkState.isConnected && networkState.isInternetReachable;
+    } catch (error) {
+      console.error('Error checking network state:', error);
+      return false;
+    }
+  }
+
+  // Cache management
+  async setCache(key, data, ttl = this.defaultCacheTTL) {
+    try {
+      const cacheItem = {
+        data,
+        timestamp: Date.now(),
+        ttl
+      };
+      await AsyncStorage.setItem(this.cachePrefix + key, JSON.stringify(cacheItem));
+    } catch (error) {
+      console.error('Error setting cache:', error);
+    }
+  }
+
+  async getCache(key) {
+    try {
+      const cached = await AsyncStorage.getItem(this.cachePrefix + key);
+      if (!cached) return null;
+
+      const cacheItem = JSON.parse(cached);
+      const isExpired = Date.now() - cacheItem.timestamp > cacheItem.ttl;
+      
+      if (isExpired) {
+        await AsyncStorage.removeItem(this.cachePrefix + key);
+        return null;
+      }
+
+      return cacheItem.data;
+    } catch (error) {
+      console.error('Error getting cache:', error);
+      return null;
+    }
+  }
+
+  async clearCache(key) {
+    try {
+      await AsyncStorage.removeItem(this.cachePrefix + key);
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+    }
+  }
+
   // Stwórz grupę
   async createGroup(name, description) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
+
+      // Ensure user profile exists
+      await ProfileSync.ensureUserProfile();
 
       const { data, error } = await supabase
         .from('budget_groups')
@@ -23,6 +87,10 @@ export class BudgetGroupController {
 
       // Dodaj twórcę jako admina
       await this.addMemberToGroup(data.id, user.id, 'admin');
+      
+      // Clear groups cache
+      await this.clearCache('user_groups');
+      
       return data;
     } catch (error) {
       console.error('Error creating group:', error);
@@ -35,6 +103,31 @@ export class BudgetGroupController {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
+
+      // Sprawdź czy użytkownik jest adminem grupy
+      const { data: membership } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        throw new Error('Only group admins can send invitations');
+      }
+
+      // Sprawdź czy zaproszenie już nie istnieje
+      const { data: existingInvitation } = await supabase
+        .from('group_invitations')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('invited_email', email)
+        .eq('status', 'pending')
+        .single();
+
+      if (existingInvitation) {
+        throw new Error('Invitation already sent to this email');
+      }
 
       const { data, error } = await supabase
         .from('group_invitations')
@@ -59,46 +152,61 @@ export class BudgetGroupController {
   async getMyInvitations() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
+      if (!user || !user.email) throw new Error('User not authenticated');
 
       const { data, error } = await supabase
         .from('group_invitations')
         .select(`
           *,
-          budget_groups!inner(name, description)
+          budget_groups!inner(*)
         `)
         .eq('invited_email', user.email)
         .eq('status', 'pending');
 
       if (error) {
-        console.error('Supabase error:', error);
+        console.error('Error getting invitations:', error);
         return [];
       }
       
       return data || [];
     } catch (error) {
-      console.error('Error getting invitations:', error);
+      console.error('Error getting user invitations:', error);
       return [];
     }
   }
 
-  // Akceptuj zaproszenie
+  // Zaakceptuj zaproszenie
   async acceptInvitation(invitationId) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Pobierz zaproszenie
-      const { data: invitation, error: invError } = await supabase
+      // Pobierz szczegóły zaproszenia
+      const { data: invitation, error: invitationError } = await supabase
         .from('group_invitations')
         .select('*')
         .eq('id', invitationId)
         .eq('invited_email', user.email)
+        .eq('status', 'pending')
         .single();
 
-      if (invError) throw invError;
+      if (invitationError || !invitation) {
+        throw new Error('Invitation not found or already processed');
+      }
 
-      // Dodaj do grupy
+      // Sprawdź czy użytkownik już nie jest członkiem grupy
+      const { data: existingMember } = await supabase
+        .from('budget_group_members')
+        .select('id')
+        .eq('group_id', invitation.group_id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (existingMember) {
+        throw new Error('You are already a member of this group');
+      }
+
+      // Dodaj użytkownika do grupy
       await this.addMemberToGroup(invitation.group_id, user.id, 'member');
 
       // Oznacz zaproszenie jako zaakceptowane
@@ -118,10 +226,14 @@ export class BudgetGroupController {
   // Odrzuć zaproszenie
   async rejectInvitation(invitationId) {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
       const { error } = await supabase
         .from('group_invitations')
         .update({ status: 'rejected' })
-        .eq('id', invitationId);
+        .eq('id', invitationId)
+        .eq('invited_email', user.email);
 
       if (error) throw error;
       return true;
@@ -145,9 +257,246 @@ export class BudgetGroupController {
         .single();
 
       if (error) throw error;
+      
+      // Clear members cache for this group
+      await this.clearCache(`members_${groupId}`);
+      
       return data;
     } catch (error) {
       console.error('Error adding member to group:', error);
+      throw error;
+    }
+  }
+
+  // Pobierz członków grupy (tylko dla adminów)
+  async getGroupMembers(groupId, forceRefresh = false) {
+    try {
+      const cacheKey = `members_${groupId}`;
+      const online = await this.isOnline();
+
+      console.log(`Getting group members for ${groupId}, online: ${online}, forceRefresh: ${forceRefresh}`);
+
+      // Try cache first if not forcing refresh
+      if (!forceRefresh) {
+        const cached = await this.getCache(cacheKey);
+        if (cached) {
+          console.log('Returning cached group members');
+          return cached;
+        }
+      }
+
+      // If offline and no cache, throw error
+      if (!online) {
+        throw new Error('No internet connection and no cached data available');
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Check if user is admin of the group
+      const { data: membership } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        throw new Error('Only group admins can view member list');
+      }
+
+      console.log('Fetching group members from database...');
+
+      // ROZWIĄZANIE 1: Najpierw pobierz członków grupy, potem profile
+      const { data: members, error: membersError } = await supabase
+        .from('budget_group_members')
+        .select('*')
+        .eq('group_id', groupId)
+        .order('joined_at', { ascending: true });
+
+      if (membersError) {
+        console.error('Error fetching group members:', membersError);
+        throw membersError;
+      }
+
+      console.log(`Fetched ${members?.length || 0} members from database`);
+
+      if (!members || members.length === 0) {
+        return [];
+      }
+
+      // Pobierz profile dla wszystkich członków
+      const userIds = members.map(member => member.user_id);
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('id', userIds);
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        // Kontynuuj bez profili - użyj fallback
+      }
+
+      console.log(`Fetched ${profiles?.length || 0} profiles`);
+
+      // Połącz dane członków z profilami
+      const membersWithEmails = await Promise.all(
+        members.map(async (member) => {
+          // Znajdź profil dla tego członka
+          const profile = profiles?.find(p => p.id === member.user_id);
+          
+          let email = profile?.email;
+          let fullName = profile?.full_name;
+          let avatarUrl = profile?.avatar_url;
+
+          // Jeśli nie ma profilu, spróbuj go utworzyć lub użyj fallback
+          if (!profile) {
+            console.log(`No profile found for user ${member.user_id}, attempting to create/fallback`);
+            
+            try {
+              // Dla aktualnego użytkownika - użyj danych z auth
+              if (member.user_id === user.id) {
+                await ProfileSync.ensureUserProfile();
+                const userProfile = await ProfileSync.getProfile();
+                if (userProfile) {
+                  email = userProfile.email;
+                  fullName = userProfile.full_name;
+                  avatarUrl = userProfile.avatar_url;
+                }
+              } else {
+                // Dla innych użytkowników - stwórz podstawowy profil
+                const basicProfile = {
+                  id: member.user_id,
+                  email: `user-${member.user_id.substring(0, 8)}@unknown.com`,
+                  full_name: `User ${member.user_id.substring(0, 8)}`
+                };
+
+                const { data: createdProfile, error: insertError } = await supabase
+                  .from('profiles')
+                  .insert(basicProfile)
+                  .select()
+                  .single();
+
+                if (!insertError) {
+                  email = createdProfile.email;
+                  fullName = createdProfile.full_name;
+                } else if (insertError.code === '23505') {
+                  // Profil już istnieje, spróbuj go pobrać
+                  const { data: existingProfile } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', member.user_id)
+                    .single();
+                  
+                  if (existingProfile) {
+                    email = existingProfile.email;
+                    fullName = existingProfile.full_name;
+                    avatarUrl = existingProfile.avatar_url;
+                  }
+                }
+              }
+            } catch (profileError) {
+              console.error('Error creating/fetching profile:', profileError);
+            }
+
+            // Ultimate fallback
+            if (!email) {
+              email = `User ${member.user_id.substring(0, 8)}`;
+              fullName = `User ${member.user_id.substring(0, 8)}`;
+            }
+          }
+
+          return {
+            ...member,
+            email: email || 'Unknown Email',
+            user_email: email || 'Unknown Email',
+            full_name: fullName || email?.split('@')[0] || 'Unknown User',
+            avatar_url: avatarUrl,
+            display_name: fullName || email?.split('@')[0] || `User ${member.user_id.substring(0, 8)}`,
+            // Dodaj profile object dla kompatybilności z poprzednim kodem
+            profiles: profile ? {
+              email: email,
+              full_name: fullName,
+              avatar_url: avatarUrl
+            } : null
+          };
+        })
+      );
+
+      console.log('Processed members with email data:', membersWithEmails);
+
+      // Cache the result
+      await this.setCache(cacheKey, membersWithEmails, this.defaultCacheTTL);
+
+      return membersWithEmails;
+
+    } catch (error) {
+      console.error('Error getting group members:', error);
+      
+      // Try to return stale cache as last resort
+      const cacheKey = `members_${groupId}`;
+      const staleCache = await this.getCache(cacheKey);
+      if (staleCache) {
+        console.log('Returning stale cache due to error');
+        return staleCache;
+      }
+      
+      throw error;
+    }
+  }
+
+  // Usuń członka z grupy (tylko dla adminów)
+  async removeMemberFromGroup(groupId, userId) {
+    try {
+      const online = await this.isOnline();
+      if (!online) {
+        throw new Error('This action requires internet connection');
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Check if user is admin
+      const { data: membership } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (!membership || membership.role !== 'admin') {
+        throw new Error('Only group admins can remove members');
+      }
+
+      // Check if trying to remove admin
+      const { data: targetMember } = await supabase
+        .from('budget_group_members')
+        .select('role')
+        .eq('group_id', groupId)
+        .eq('user_id', userId)
+        .single();
+
+      if (targetMember?.role === 'admin') {
+        throw new Error('Cannot remove group admin');
+      }
+
+      // Remove member
+      const { error } = await supabase
+        .from('budget_group_members')
+        .delete()
+        .eq('group_id', groupId)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      // Clear cache to force refresh
+      await this.clearCache(`members_${groupId}`);
+
+      console.log(`Member ${userId} removed from group ${groupId}`);
+      return true;
+
+    } catch (error) {
+      console.error('Error removing member from group:', error);
       throw error;
     }
   }
@@ -410,369 +759,14 @@ export class BudgetGroupController {
     }
   }
 
-  // src/controllers/BudgetGroupController.js - Additional methods for enhanced group management
-
-/**
- * Get all members of a specific group with their roles and details
- */
-async getGroupMembers(groupId) {
-  try {
-    console.log('Getting group members for group:', groupId);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // First check if user has access to this group
-    const { data: userMembership, error: membershipError } = await supabase
-      .from('budget_group_members')
-      .select('role')
-      .eq('group_id', groupId)
-      .eq('user_id', user.id)
-      .single();
-
-    if (membershipError || !userMembership) {
-      throw new Error('No access to group members');
+  // Initialize profiles for existing users (call once)
+  async initializeExistingUserProfiles() {
+    try {
+      console.log('Initializing profiles for existing users...');
+      await ProfileSync.createProfilesForExistingUsers();
+      console.log('Profile initialization complete');
+    } catch (error) {
+      console.error('Error initializing user profiles:', error);
     }
-
-    // Get all group members with user details
-    const { data: members, error } = await supabase
-      .from('budget_group_members')
-      .select(`
-        id,
-        role,
-        joined_at,
-        user_id,
-        profiles:user_id (
-          id,
-          email,
-          full_name,
-          avatar_url
-        )
-      `)
-      .eq('group_id', groupId)
-      .order('joined_at', { ascending: true });
-
-    if (error) throw error;
-
-    // Format the response
-    const formattedMembers = members.map(member => ({
-      id: member.id,
-      userId: member.user_id,
-      role: member.role,
-      joinedAt: member.joined_at,
-      email: member.profiles?.email || 'Unknown',
-      fullName: member.profiles?.full_name || 'Unknown User',
-      avatarUrl: member.profiles?.avatar_url || null,
-      isCurrentUser: member.user_id === user.id
-    }));
-
-    console.log('Group members retrieved:', formattedMembers.length);
-    return formattedMembers;
-
-  } catch (error) {
-    console.error('Error getting group members:', error);
-    throw error;
   }
-}
-
-/**
- * Get user's role in a specific group
- */
-async getUserRole(groupId) {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    const { data: membership, error } = await supabase
-      .from('budget_group_members')
-      .select('role')
-      .eq('group_id', groupId)
-      .eq('user_id', user.id)
-      .single();
-
-    if (error) {
-      console.error('Error getting user role:', error);
-      return null;
-    }
-
-    return membership.role;
-  } catch (error) {
-    console.error('Error getting user role:', error);
-    return null;
-  }
-}
-
-/**
- * Update user role in a group (admin/owner only)
- */
-async updateUserRole(groupId, userId, newRole) {
-  try {
-    console.log(`Updating user ${userId} role to ${newRole} in group ${groupId}`);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // Check if current user has permission to change roles
-    const currentUserRole = await this.getUserRole(groupId);
-    if (currentUserRole !== 'owner' && currentUserRole !== 'admin') {
-      throw new Error('Only owners and admins can change user roles');
-    }
-
-    // Prevent role changes to owner (only owner can transfer ownership)
-    if (newRole === 'owner' && currentUserRole !== 'owner') {
-      throw new Error('Only current owner can assign ownership');
-    }
-
-    // Prevent demoting the last owner
-    if (currentUserRole === 'owner' && userId === user.id && newRole !== 'owner') {
-      const { data: ownerCount } = await supabase
-        .from('budget_group_members')
-        .select('id')
-        .eq('group_id', groupId)
-        .eq('role', 'owner');
-
-      if (ownerCount && ownerCount.length <= 1) {
-        throw new Error('Cannot demote the last owner. Transfer ownership first.');
-      }
-    }
-
-    // Update the role
-    const { data, error } = await supabase
-      .from('budget_group_members')
-      .update({ 
-        role: newRole,
-        updated_at: new Date().toISOString()
-      })
-      .eq('group_id', groupId)
-      .eq('user_id', userId)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    console.log('User role updated successfully');
-    return data;
-
-  } catch (error) {
-    console.error('Error updating user role:', error);
-    throw error;
-  }
-}
-
-/**
- * Remove user from group (admin/owner only, or user removing themselves)
- */
-async removeUserFromGroup(groupId, userId) {
-  try {
-    console.log(`Removing user ${userId} from group ${groupId}`);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    const currentUserRole = await this.getUserRole(groupId);
-    const isCurrentUser = userId === user.id;
-
-    // Check permissions
-    if (!isCurrentUser && currentUserRole !== 'owner' && currentUserRole !== 'admin') {
-      throw new Error('Only owners and admins can remove other users');
-    }
-
-    // Prevent removing the last owner
-    if (!isCurrentUser) {
-      const targetUserRole = await this.getUserRole(groupId, userId);
-      if (targetUserRole === 'owner') {
-        const { data: ownerCount } = await supabase
-          .from('budget_group_members')
-          .select('id')
-          .eq('group_id', groupId)
-          .eq('role', 'owner');
-
-        if (ownerCount && ownerCount.length <= 1) {
-          throw new Error('Cannot remove the last owner. Transfer ownership first.');
-        }
-      }
-    }
-
-    // Remove the user
-    const { error } = await supabase
-      .from('budget_group_members')
-      .delete()
-      .eq('group_id', groupId)
-      .eq('user_id', userId);
-
-    if (error) throw error;
-
-    console.log('User removed from group successfully');
-    return true;
-
-  } catch (error) {
-    console.error('Error removing user from group:', error);
-    throw error;
-  }
-}
-
-/**
- * Delete a group (owner only)
- */
-async deleteGroup(groupId) {
-  try {
-    console.log(`Deleting group ${groupId}`);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // Check if user is owner
-    const userRole = await this.getUserRole(groupId);
-    if (userRole !== 'owner') {
-      throw new Error('Only group owners can delete groups');
-    }
-
-    // Start transaction by deleting related data first
-    
-    // 1. Delete all group transactions
-    const { error: transactionsError } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('group_id', groupId);
-
-    if (transactionsError) {
-      console.error('Error deleting group transactions:', transactionsError);
-      throw transactionsError;
-    }
-
-    // 2. Delete all group budgets
-    const { error: budgetsError } = await supabase
-      .from('budgets')
-      .delete()
-      .eq('group_id', groupId);
-
-    if (budgetsError) {
-      console.error('Error deleting group budgets:', budgetsError);
-      throw budgetsError;
-    }
-
-    // 3. Delete all group members
-    const { error: membersError } = await supabase
-      .from('budget_group_members')
-      .delete()
-      .eq('group_id', groupId);
-
-    if (membersError) {
-      console.error('Error deleting group members:', membersError);
-      throw membersError;
-    }
-
-    // 4. Delete pending invitations
-    const { error: invitationsError } = await supabase
-      .from('budget_group_invitations')
-      .delete()
-      .eq('group_id', groupId);
-
-    if (invitationsError) {
-      console.error('Error deleting group invitations:', invitationsError);
-      // Non-critical error, continue
-    }
-
-    // 5. Finally delete the group itself
-    const { error: groupError } = await supabase
-      .from('budget_groups')
-      .delete()
-      .eq('id', groupId);
-
-    if (groupError) throw groupError;
-
-    console.log('Group deleted successfully');
-    return true;
-
-  } catch (error) {
-    console.error('Error deleting group:', error);
-    throw error;
-  }
-}
-
-/**
- * Get group statistics and insights
- */
-async getGroupStats(groupId) {
-  try {
-    console.log('Getting group statistics for:', groupId);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // Check access
-    const userRole = await this.getUserRole(groupId);
-    if (!userRole) {
-      throw new Error('No access to group');
-    }
-
-    const currentDate = new Date();
-    const currentMonth = currentDate.getMonth();
-    const currentYear = currentDate.getFullYear();
-
-    // Get current month transactions
-    const startDate = new Date(currentYear, currentMonth, 1);
-    const endDate = new Date(currentYear, currentMonth + 1, 0);
-
-    const { data: transactions, error: transactionsError } = await supabase
-      .from('transactions')
-      .select('*')
-      .eq('group_id', groupId)
-      .gte('date', startDate.toISOString())
-      .lte('date', endDate.toISOString());
-
-    if (transactionsError) throw transactionsError;
-
-    // Get group members count
-    const { data: members, error: membersError } = await supabase
-      .from('budget_group_members')
-      .select('user_id')
-      .eq('group_id', groupId);
-
-    if (membersError) throw membersError;
-
-    // Calculate statistics
-    const totalTransactions = transactions.length;
-    const totalIncome = transactions
-      .filter(t => t.is_income === true)
-      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-    
-    const totalExpenses = transactions
-      .filter(t => t.is_income === false)
-      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
-    // Get most active contributors
-    const userContributions = {};
-    transactions.forEach(transaction => {
-      if (!userContributions[transaction.user_id]) {
-        userContributions[transaction.user_id] = {
-          userId: transaction.user_id,
-          transactionCount: 0,
-          totalAmount: 0
-        };
-      }
-      userContributions[transaction.user_id].transactionCount++;
-      userContributions[transaction.user_id].totalAmount += parseFloat(transaction.amount);
-    });
-
-    const topContributors = Object.values(userContributions)
-      .sort((a, b) => b.transactionCount - a.transactionCount)
-      .slice(0, 3);
-
-    return {
-      membersCount: members.length,
-      totalTransactions,
-      totalIncome,
-      totalExpenses,
-      balance: totalIncome - totalExpenses,
-      topContributors,
-      currentMonth,
-      currentYear
-    };
-
-  } catch (error) {
-    console.error('Error getting group stats:', error);
-    throw error;
-  }
-}
 }
