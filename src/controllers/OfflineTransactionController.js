@@ -59,24 +59,31 @@ export class OfflineTransactionController extends SupabaseTransactionController 
   // NOWA metoda - get cached transactions by date range z groupId
   async getCachedTransactionsByDateRange(startDate, endDate, groupId = null) {
     const cacheKey = OfflineStorageManager.getTransactionsKey(groupId);
-    
+
     try {
       const cachedTransactions = await OfflineStorageManager.getCachedData(cacheKey);
-      
+
       if (!cachedTransactions || !Array.isArray(cachedTransactions)) {
         console.log(`No cached transactions found for group ${groupId}`);
         return [];
       }
 
-      // Filter by date range
-      const filteredTransactions = cachedTransactions.filter(transaction => {
+      // ✅ DODANE: Najpierw filtruj child transactions (tak jak w getCachedGroupTransactions)
+      const parentAndRegularTransactions = cachedTransactions.filter(transaction => {
+        return transaction.is_parent === true ||
+               (transaction.parent_id === null && transaction.is_parent !== true);
+      });
+
+      // Następnie filtruj po date range
+      const filteredTransactions = parentAndRegularTransactions.filter(transaction => {
         const transactionDate = new Date(transaction.date);
         const start = new Date(startDate);
         const end = new Date(endDate);
         return transactionDate >= start && transactionDate <= end;
       });
 
-      console.log(`Retrieved ${filteredTransactions.length} cached transactions for group ${groupId} in date range`);
+      console.log(`Retrieved ${filteredTransactions.length} cached transactions for group ${groupId} in date range (${cachedTransactions.length} total, ${cachedTransactions.length - parentAndRegularTransactions.length} child transactions filtered out)`);
+
       return filteredTransactions;
     } catch (error) {
       console.error('Error getting cached transactions by date range:', error);
@@ -144,15 +151,21 @@ export class OfflineTransactionController extends SupabaseTransactionController 
   // POPRAWIONA metoda getCachedTransactions z groupId
   async getCachedTransactions(groupId = null) {
     const cacheKey = OfflineStorageManager.getTransactionsKey(groupId);
-    
+
     try {
       const cached = await OfflineStorageManager.getCachedData(cacheKey);
-      
+
       if (cached && Array.isArray(cached)) {
-        console.log(`Retrieved ${cached.length} cached transactions for group ${groupId}`);
-        return cached;
+        // ✅ DODANE: Filtruj child transactions z cache
+        const filteredTransactions = cached.filter(transaction => {
+          return transaction.is_parent === true ||
+                 (transaction.parent_id === null && transaction.is_parent !== true);
+        });
+
+        console.log(`Retrieved ${filteredTransactions.length} cached transactions for group ${groupId} (${cached.length} total, ${cached.length - filteredTransactions.length} child transactions filtered out)`);
+        return filteredTransactions;
       }
-      
+
       console.log(`No cached transactions found for group ${groupId}, returning empty array`);
       return [];
     } catch (error) {
@@ -440,77 +453,106 @@ export class OfflineTransactionController extends SupabaseTransactionController 
   async getGroupTransactions(groupId = 'personal') {
     try {
       console.log('OfflineTransactionController.getGroupTransactions called with groupId:', groupId);
-      
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('User not authenticated');
 
-      // ✅ WAŻNE: Wyczyść cache dla poprzedniej grupy przy zmianie
-      if (this.lastGroupId && this.lastGroupId !== groupId) {
-        console.log('Group changed, clearing transaction cache');
-        this.lastGroupId = groupId;
-        // Możesz dodać logikę czyszczenia cache tutaj
-      }
-      this.lastGroupId = groupId;
+      const isOnline = await OfflineStorageManager.isOnline();
+      const cacheKey = OfflineStorageManager.getTransactionsKey(groupId);
 
-      let query = supabase
-        .from('transactions')
-        .select('*');
+      if (isOnline) {
+        try {
+          // ONLINE: Pobierz z serwera
+          console.log('Online - fetching group transactions from server');
 
-      // ✅ POPRAWIONE filtrowanie według grupy
-      if (groupId === 'personal' || groupId === null) {
-        // Personal Budget - tylko MOJE transakcje bez group_id
-        console.log('Filtering for personal transactions (user_id = current user, group_id = null)');
-        query = query
-          .eq('user_id', user.id)  // ✅ Dla personal - tylko moje
-          .is('group_id', null);   // ✅ Bez group_id
-      } else {
-        // Konkretna grupa - sprawdź członkostwo i pobierz wszystkie transakcje grupy
-        console.log('Filtering for group transactions, group_id:', groupId);
-        
-        // Sprawdź członkostwo w grupie PRZED pobraniem transakcji
-        const { data: membership, error: membershipError } = await supabase
-          .from('budget_group_members')
-          .select('*')
-          .eq('group_id', groupId)
-          .eq('user_id', user.id)
-          .single();
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) throw new Error('User not authenticated');
 
-        if (membershipError || !membership) {
-          console.error('No access to group:', groupId, membershipError?.message);
-          return [];
+          let query = supabase
+            .from('transactions')
+            .select('*');
+
+          // Filtruj według grupy
+          if (groupId === 'personal' || groupId === null) {
+            console.log('Filtering for personal transactions (user_id = current user, group_id = null)');
+            query = query
+              .eq('user_id', user.id)
+              .is('group_id', null);
+          } else {
+            console.log('Filtering for group transactions, group_id:', groupId);
+
+            // Sprawdź członkostwo w grupie
+            const { data: membership, error: membershipError } = await supabase
+              .from('budget_group_members')
+              .select('*')
+              .eq('group_id', groupId)
+              .eq('user_id', user.id)
+              .single();
+
+            if (membershipError || !membership) {
+              console.error('No access to group:', groupId, membershipError?.message);
+              return [];
+            }
+
+            // Dla grupy - wszystkie transakcje tej grupy
+            query = query.eq('group_id', groupId);
+          }
+
+          // ✅ DODANE: Filtruj child transactions (tak jak w innych metodach)
+          query = query.or('is_parent.eq.true,and(parent_id.is.null,is_parent.eq.false)');
+
+          // Wykonaj zapytanie
+          const { data, error } = await query.order('date', { ascending: false });
+
+          if (error) {
+            console.error('Error fetching group transactions:', error);
+            throw error;
+          }
+
+          console.log(`Online: Found ${data?.length || 0} transactions for group ${groupId}`);
+
+          // Cache wyniki
+          await OfflineStorageManager.cacheData(cacheKey, data || []);
+
+          return data || [];
+
+        } catch (error) {
+          console.error('Online fetch failed, falling back to cache:', error);
+          // Fallback do cache
+          return await this.getCachedGroupTransactions(groupId);
         }
-
-        // ✅ Dla grupy - wszystkie transakcje tej grupy (od wszystkich członków)
-        query = query.eq('group_id', groupId);  // ✅ NIE filtruj po user_id!
+      } else {
+        // OFFLINE: Użyj cache
+        console.log('Offline - using cached group transactions');
+        return await this.getCachedGroupTransactions(groupId);
       }
-
-      // Dodaj sortowanie i wykonaj zapytanie
-      query = query.order('date', { ascending: false });
-      
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching group transactions:', error);
-        throw error;
-      }
-
-      console.log(`OfflineTransactionController: Loaded ${data?.length || 0} transactions for group ${groupId}`);
-      
-      // ✅ Debug: sprawdź poprawność danych
-      if (data?.length > 0) {
-        console.log('Sample transaction:', {
-          id: data[0].id,
-          user_id: data[0].user_id,
-          group_id: data[0].group_id,
-          description: data[0].description,
-          amount: data[0].amount
-        });
-      }
-
-      return data || [];
     } catch (error) {
       console.error('Error in getGroupTransactions:', error);
-      throw error;
+      return [];
     }
   }
+
+
+  async getCachedGroupTransactions(groupId = 'personal') {
+    try {
+      const cacheKey = OfflineStorageManager.getTransactionsKey(groupId);
+      const cached = await OfflineStorageManager.getCachedData(cacheKey);
+
+      if (!cached || !Array.isArray(cached)) {
+        console.log(`No cached transactions found for group ${groupId}`);
+        return [];
+      }
+
+      // ✅ WAŻNE: Filtruj child transactions z cache (tak jak robi serwer)
+      const filteredTransactions = cached.filter(transaction => {
+        return transaction.is_parent === true ||
+               (transaction.parent_id === null && transaction.is_parent !== true);
+      });
+
+      console.log(`Retrieved ${filteredTransactions.length} cached transactions for group ${groupId} (${cached.length} total, ${cached.length - filteredTransactions.length} child transactions filtered out)`);
+
+      return filteredTransactions;
+    } catch (error) {
+      console.error('Error getting cached group transactions:', error);
+      return [];
+    }
+  }
+
 }
