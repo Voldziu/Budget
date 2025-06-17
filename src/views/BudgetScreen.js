@@ -302,7 +302,7 @@ const BudgetScreen = ({navigation}) => {
         backgroundColor={theme.colors.background}
       />
 
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} edges={['top','right']}>
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
@@ -506,7 +506,12 @@ const BudgetScreen = ({navigation}) => {
                   style={[
                     styles.analyticsValue,
                     {color: theme.colors.success},
-                  ]}>
+                    
+
+                  ]}
+                  numberOfLines={1}
+                    adjustsFontSizeToFit={true}
+                    minimumFontScale={0.6}>
                   {formatAmount(
                     (summary?.totalExpenses || 0) / new Date().getDate(),
                   )}
@@ -1271,6 +1276,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   budgetGradient: {
+    flex:1,
     borderRadius: 24,
   },
   glassOverlay: {
@@ -1327,20 +1333,23 @@ const styles = StyleSheet.create({
   // Enhanced Analytics Row
   analyticsRow: {
     flexDirection: 'row',
+    flex:1,
     paddingHorizontal: 24,
     gap: 16,
-    marginBottom: 28,
+    marginBottom: 40,
   },
   analyticsCard: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 10,
     overflow: 'hidden',
     borderWidth: 1,
+    minHeight:150
   },
   analyticsGradient: {
-    padding: 20,
+    flex: 1,
+    padding: 10,
     alignItems: 'center',
-    gap: 12,
+    gap: 6,
   },
   analyticsIcon: {
     width: 44,
@@ -1351,14 +1360,22 @@ const styles = StyleSheet.create({
   },
   analyticsLabel: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '500',
+    numberOfLines: 1,
+    ajustsFontSizeToFit: true,
+    minimumFontScale: 0.8,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   analyticsValue: {
     fontSize: 18,
+    numqberOfLines: 1,
+    adjustsFontSizeToFit: true,
+    minimumFontScale: 0.8,
     fontWeight: '700',
     letterSpacing: -0.5,
+    textAlign: 'center',
+    width: '100%',
   },
 
   // Enhanced Charts
@@ -1370,6 +1387,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   chartsGradient: {
+    flex:1,
     padding: 24,
   },
   chartsTitleContainer: {
@@ -1497,18 +1515,23 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   categoryCard: {
+    flex: 1,
     borderRadius: 20,
     marginBottom: 16,
     borderWidth: 1,
     overflow: 'hidden',
+    minHeight: 110,
   },
   categoryGradient: {
+    flex:1,
     padding: 20,
   },
   categoryContent: {
+    flex: 1,
     gap: 12,
   },
   categoryRow: {
+    flex:1,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1567,8 +1590,9 @@ const styles = StyleSheet.create({
 
   // Editing
   editingCategory: {
-    gap: 16,
-  },
+    flex:1,
+    gap:8,
+  },flex:1,
   categoryEditHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1633,6 +1657,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   modalGradient: {
+    flex:1,
     padding: 24,
   },
   modalTitle: {
